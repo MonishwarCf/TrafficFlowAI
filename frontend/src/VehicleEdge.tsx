@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { getBezierPath, EdgeProps, BaseEdge } from 'reactflow';
+import { getSmoothStepPath, EdgeProps, BaseEdge } from 'reactflow';
 
 export interface Vehicle {
   id: number;
@@ -21,7 +21,7 @@ export default function VehicleEdge({
   markerEnd,
   data
 }: EdgeProps) {
-  const [edgePath] = getBezierPath({
+  const [edgePath] = getSmoothStepPath({
     sourceX,
     sourceY,
     sourcePosition,

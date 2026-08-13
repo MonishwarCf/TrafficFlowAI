@@ -33,24 +33,28 @@ def node_simulator(node_id):
             nodes[node_id]["light_ticks"] = 0
 
     while True:
-        with nodes_lock:
-            if node_id not in nodes or not nodes[node_id]["active"]:
-                break
+        try:
+            with nodes_lock:
+                if node_id not in nodes or not nodes[node_id]["active"]:
+                    break
+                
+                current_light = nodes[node_id].get("light", "Red")
+                new_light = "Green" if current_light == "Red" else "Red"
+                nodes[node_id]["light"] = new_light
+                
+                density = nodes[node_id].get("density", 0)
+                
+            message = {
+                'type': 'LIGHT_UPDATE',
+                'node': node_id,
+                'density': density,
+                'light': new_light,
+                'timestamp': time.time()
+            }
             
-            current_light = nodes[node_id].get("light", "Red")
-            new_light = "Green" if current_light == "Red" else "Red"
-            nodes[node_id]["light"] = new_light
-            
-            density = nodes[node_id].get("density", 0)
-            
-        message = {
-            'node': node_id,
-            'density': density,
-            'light': new_light,
-            'timestamp': time.time()
-        }
-        
-        publish_queue.put(('traffic.' + node_id, message))
+            publish_queue.put(('traffic.' + node_id, message))
+        except Exception as e:
+            print(f"Error in node_simulator {node_id}: {e}")
         time.sleep(15)
 
 def publisher_thread():

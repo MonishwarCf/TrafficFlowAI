@@ -1,13 +1,10 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import ReactFlow, { 
   Background, 
-  Controls, 
+  Controls,
+  Panel,
   Node, 
-  Edge,
-  applyNodeChanges,
-  applyEdgeChanges,
-  NodeChange,
-  EdgeChange
+  Edge
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useTrafficWebSocket } from './hooks/useTrafficWebSocket';
@@ -15,47 +12,34 @@ import { Link } from 'react-router-dom';
 import CustomJunctionNode from './CustomJunctionNode';
 import VehicleEdge from './VehicleEdge';
 import ExitNode from './ExitNode';
-import { addEdge, Connection } from 'reactflow';
-
-const initialNodes: Node[] = [
-  { id: 'Node1', type: 'junction', position: { x: 200, y: 200 }, data: { label: 'Node1', light: 'Red' } },
-  { id: 'Node2', type: 'junction', position: { x: 600, y: 200 }, data: { label: 'Node2', light: 'Red' } },
-  { id: 'Node3', type: 'junction', position: { x: 400, y: 500 }, data: { label: 'Node3', light: 'Red' } },
-];
-
-const initialEdges: Edge[] = [
-  { id: 'e1-2', source: 'Node1', target: 'Node2', type: 'vehicle', data: { targetNodeId: 'Node2', targetLight: 'Red' } },
-  { id: 'e2-3', source: 'Node2', target: 'Node3', type: 'vehicle', data: { targetNodeId: 'Node3', targetLight: 'Red' } },
-  { id: 'e3-1', source: 'Node3', target: 'Node1', type: 'vehicle', data: { targetNodeId: 'Node1', targetLight: 'Red' } },
-];
+import { useTrafficContext } from './TrafficContext';
 
 export default function Sandbox() {
   const { sendTopologyUpdate, nodes: realtimeNodes } = useTrafficWebSocket();
-  const [nodes, setNodes] = useState<Node[]>(initialNodes);
-  const [edges, setEdges] = useState<Edge[]>(initialEdges);
+  const { 
+    nodes, setNodes, onNodesChange, 
+    edges, setEdges, onEdgesChange, onConnect,
+    isSpawnMode, setIsSpawnMode 
+  } = useTrafficContext();
+  
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [spawnCount, setSpawnCount] = useState<number>(5);
 
   const nodeTypes = useMemo(() => ({ junction: CustomJunctionNode, exit: ExitNode }), []);
   const edgeTypes = useMemo(() => ({ vehicle: VehicleEdge }), []);
 
-  const onNodesChange = useCallback((changes: NodeChange[]) => setNodes((nds) => applyNodeChanges(changes, nds)), []);
-  const onEdgesChange = useCallback((changes: EdgeChange[]) => setEdges((eds) => applyEdgeChanges(changes, eds)), []);
-  const onConnect = useCallback((connection: Connection) => {
-    setEdges((eds) => addEdge({ ...connection, type: 'vehicle', data: { targetNodeId: connection.target, targetLight: 'Red' } }, eds));
-  }, [setEdges]);
-
   useEffect(() => {
     // Send topology updates for these nodes when mounted
-    initialNodes.forEach(n => {
+    nodes.forEach(n => {
       sendTopologyUpdate({ type: 'add_node', id: n.id });
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sendTopologyUpdate]);
 
   useEffect(() => {
     setNodes(nds => nds.map(n => {
       const realTimeNode = realtimeNodes[n.id];
-      if (realTimeNode) {
+      if (realTimeNode && realTimeNode.light !== n.data.light) {
         return { ...n, data: { ...n.data, light: realTimeNode.light } };
       }
       return n;
@@ -65,13 +49,22 @@ export default function Sandbox() {
       const targetNode = realtimeNodes[e.target];
       const targetNodeType = nodes.find(n => n.id === e.target)?.type;
       
-      let updatedData = { ...e.data, targetNodeType };
-      if (targetNode) {
-        updatedData.targetLight = targetNode.light;
+      let changed = false;
+      let updatedData = { ...e.data };
+      
+      if (updatedData.targetNodeType !== targetNodeType) {
+        updatedData.targetNodeType = targetNodeType;
+        changed = true;
       }
-      return { ...e, data: updatedData };
+      
+      if (targetNode && updatedData.targetLight !== targetNode.light) {
+        updatedData.targetLight = targetNode.light;
+        changed = true;
+      }
+      
+      return changed ? { ...e, data: updatedData } : e;
     }));
-  }, [realtimeNodes, nodes]);
+  }, [realtimeNodes, setNodes, setEdges, nodes]);
 
   const reportWaitingCars = useCallback((_edgeId: string, targetNodeId: string, waitingCars: number) => {
     sendTopologyUpdate({
@@ -82,14 +75,18 @@ export default function Sandbox() {
   }, [sendTopologyUpdate]);
 
   useEffect(() => {
-    setEdges(eds => eds.map(e => ({
-      ...e,
-      data: { ...e.data, reportWaitingCars }
-    })));
-  }, [reportWaitingCars]);
+    setEdges(eds => eds.map(e => {
+      if (e.data?.reportWaitingCars !== reportWaitingCars) {
+        return { ...e, data: { ...e.data, reportWaitingCars } };
+      }
+      return e;
+    }));
+  }, [reportWaitingCars, setEdges]);
 
   const onEdgeClick = (_event: React.MouseEvent, edge: Edge) => {
-    setSelectedEdgeId(edge.id);
+    if (isSpawnMode) {
+      setSelectedEdgeId(edge.id);
+    }
   };
 
   const onPaneClick = () => {
@@ -113,6 +110,23 @@ export default function Sandbox() {
     }));
   };
 
+  const handleAddJunction = () => {
+    const id = `Node${nodes.length + 1}`;
+    setNodes(nds => [...nds, { id, type: 'junction', position: { x: Math.random() * 200 + 100, y: Math.random() * 200 + 100 }, data: { label: id, light: 'Red' } }]);
+    sendTopologyUpdate({ type: 'add_node', id });
+  };
+
+  const handleAddExit = () => {
+    const id = `Exit${nodes.length + 1}`;
+    setNodes(nds => [...nds, { id, type: 'exit', position: { x: Math.random() * 200 + 300, y: Math.random() * 200 + 100 }, data: { label: id } }]);
+  };
+
+  const handleResetMap = () => {
+    setNodes([]);
+    setEdges([]);
+    setSelectedEdgeId(null);
+  };
+
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#121212', color: 'white' }}>
       <header style={{ padding: '15px 30px', backgroundColor: '#1a1a1a', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #333' }}>
@@ -129,15 +143,21 @@ export default function Sandbox() {
          </div>
          <div>
             <label style={{ marginRight: '10px' }}>Vehicles to Inject:</label>
-            <input type="number" value={spawnCount} onChange={e => setSpawnCount(Number(e.target.value))} style={{ width: '80px', padding: '5px', borderRadius: '4px', border: '1px solid #555', backgroundColor: '#333', color: '#fff' }}/>
+            <input type="number" value={spawnCount} onChange={e => setSpawnCount(Number(e.target.value))} disabled={!isSpawnMode} style={{ width: '80px', padding: '5px', borderRadius: '4px', border: '1px solid #555', backgroundColor: '#333', color: '#fff' }}/>
          </div>
          <button 
            onClick={handleInject} 
-           disabled={!selectedEdgeId}
-           style={{ padding: '8px 24px', cursor: !selectedEdgeId ? 'not-allowed' : 'pointer', backgroundColor: !selectedEdgeId ? '#555' : '#4caf50', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}
+           disabled={!selectedEdgeId || !isSpawnMode}
+           style={{ padding: '8px 24px', cursor: (!selectedEdgeId || !isSpawnMode) ? 'not-allowed' : 'pointer', backgroundColor: (!selectedEdgeId || !isSpawnMode) ? '#555' : '#4caf50', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}
          >
            Inject Vehicles
          </button>
+         <div style={{ marginLeft: 'auto', display: 'flex', gap: '10px', alignItems: 'center' }}>
+           <label>
+             <input type="checkbox" checked={isSpawnMode} onChange={e => setIsSpawnMode(e.target.checked)} style={{ marginRight: '8px' }} />
+             Spawn Mode
+           </label>
+         </div>
       </div>
 
       <div style={{ flexGrow: 1, position: 'relative' }}>
@@ -152,8 +172,17 @@ export default function Sandbox() {
             edgeTypes={edgeTypes}
             onEdgeClick={onEdgeClick}
             onPaneClick={onPaneClick}
+            nodesDraggable={!isSpawnMode}
+            nodesConnectable={!isSpawnMode}
+            elementsSelectable={true}
+            defaultEdgeOptions={{ type: 'smoothstep' }}
             fitView
          >
+           <Panel position="top-left" style={{ display: 'flex', gap: '10px', backgroundColor: 'rgba(0,0,0,0.5)', padding: '10px', borderRadius: '8px' }}>
+             <button onClick={handleAddJunction} style={{ padding: '8px 16px', backgroundColor: '#2196F3', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>+ Add Junction</button>
+             <button onClick={handleAddExit} style={{ padding: '8px 16px', backgroundColor: '#9C27B0', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>+ Add Exit Node</button>
+             <button onClick={handleResetMap} style={{ padding: '8px 16px', backgroundColor: '#F44336', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Reset Map</button>
+           </Panel>
            <Background color="#333" gap={16} />
            <Controls />
          </ReactFlow>
