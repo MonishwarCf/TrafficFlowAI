@@ -41,6 +41,7 @@ export default function VehicleEdge({
   const spawnTrigger = data?.spawnTrigger || 0;
   const spawnCount = data?.spawnCount || 0;
   const reportWaitingCars = data?.reportWaitingCars;
+  const targetNodeType = data?.targetNodeType;
 
   useEffect(() => {
     if (spawnTrigger > lastSpawnTrigger.current) {
@@ -86,10 +87,14 @@ export default function VehicleEdge({
         const distToEnd = totalLength - car.distance;
         let stopped = false;
         
-        if (distToEnd < 30 && targetLight === 'Red') {
-          stopped = true;
-        } else if (distToNext < 5) {
-          stopped = true;
+        if (targetNodeType === 'exit') {
+          if (distToNext < 5) stopped = true;
+        } else {
+          if (distToEnd < 30 && targetLight === 'Red') {
+            stopped = true;
+          } else if (distToNext < 5) {
+            stopped = true;
+          }
         }
 
         car.stopped = stopped;
@@ -98,12 +103,16 @@ export default function VehicleEdge({
           car.distance += car.speed;
         }
 
-        if (stopped && distToEnd >= 0 && distToEnd < 200) {
+        if (stopped && distToEnd >= 0 && distToEnd < 200 && targetNodeType !== 'exit') {
           waitingCount++;
         }
       }
 
-      vehiclesRef.current = vehiclesRef.current.filter(c => c.distance < totalLength + 50);
+      vehiclesRef.current = vehiclesRef.current.filter(c => {
+        if (targetNodeType === 'exit' && c.distance >= totalLength - 5) return false;
+        return c.distance < totalLength + 50;
+      });
+      
       setVehicles([...vehiclesRef.current]);
 
       if (time - lastReportTime > 500) {
@@ -121,9 +130,12 @@ export default function VehicleEdge({
   }, [targetLight, id, targetNodeId, reportWaitingCars]);
 
   return (
-    <>
-      <BaseEdge path={edgePath} markerEnd={markerEnd} style={{ strokeWidth: 16, stroke: '#333' }} />
-      <BaseEdge path={edgePath} style={{ strokeWidth: 2, stroke: '#fff', strokeDasharray: '10, 10' }} />
+    <g>
+      <BaseEdge path={edgePath} style={{ strokeWidth: 40, stroke: '#222' }} />
+      <BaseEdge path={edgePath} markerEnd={markerEnd} style={{ strokeWidth: 16, stroke: '#222' }} />
+      <BaseEdge path={edgePath} style={{ strokeWidth: 22, stroke: '#fff', strokeDasharray: '10, 10' }} />
+      <BaseEdge path={edgePath} style={{ strokeWidth: 18, stroke: '#222' }} />
+      <BaseEdge path={edgePath} style={{ strokeWidth: 2, stroke: '#ffd700' }} />
       
       <path ref={pathRef} d={edgePath} fill="none" stroke="none" />
 
@@ -151,6 +163,6 @@ export default function VehicleEdge({
           />
         );
       })}
-    </>
+    </g>
   );
 }

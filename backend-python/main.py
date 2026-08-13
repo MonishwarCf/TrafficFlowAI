@@ -32,73 +32,26 @@ def node_simulator(node_id):
             nodes[node_id]["light"] = "Red"
             nodes[node_id]["light_ticks"] = 0
 
-    cars_passed_this_green = 0
-
     while True:
         with nodes_lock:
             if node_id not in nodes or not nodes[node_id]["active"]:
                 break
             
-            density = nodes[node_id].get("density", 0)
-            incoming = nodes[node_id].get("incoming", 0)
             current_light = nodes[node_id].get("light", "Red")
-            ticks = nodes[node_id].get("light_ticks", 0)
+            new_light = "Green" if current_light == "Red" else "Red"
+            nodes[node_id]["light"] = new_light
             
-            new_light = current_light
-            
-            if nodes[node_id].get("override") == "Green":
-                new_light = "Green"
-                nodes[node_id]["override_time"] -= 1
-                if nodes[node_id]["override_time"] <= 0:
-                    nodes[node_id]["override"] = None
-            else:
-                if incoming > 0:
-                    new_light = "Green"
-                elif density > 10:
-                    new_light = "Green"
-                elif density == 0 and incoming == 0 and ticks > 5 and current_light == "Green":
-                    new_light = "Red"
-                elif ticks > 10:
-                    new_light = "Red" if current_light == "Green" else "Green"
-
-            if new_light != current_light:
-                if new_light == "Red" and current_light == "Green" and cars_passed_this_green > 0:
-                    downstream = edges.get(node_id, set())
-                    if downstream:
-                        target = list(downstream)[0]
-                        proactive_msg = {
-                            "type": "proactive_message",
-                            "source": node_id,
-                            "target": target,
-                            "count": cars_passed_this_green
-                        }
-                        publish_queue.put(('topology.proactive', proactive_msg))
-                        print(f"AI Node {node_id} proactive msg: Sending {cars_passed_this_green} cars to {target}")
-                    cars_passed_this_green = 0
-                
-                nodes[node_id]["light"] = new_light
-                nodes[node_id]["light_ticks"] = 0
-            else:
-                nodes[node_id]["light_ticks"] += 1
-                
-            current_light = nodes[node_id]["light"]
-            
-            if current_light == "Green":
-                passed = min(density, 5) if density > 0 else (min(incoming, 5) if incoming > 0 else 0)
-                cars_passed_this_green += passed
-                
-                if incoming > 0:
-                    nodes[node_id]["incoming"] = max(0, incoming - 5)
+            density = nodes[node_id].get("density", 0)
             
         message = {
             'node': node_id,
             'density': density,
-            'light': current_light,
+            'light': new_light,
             'timestamp': time.time()
         }
         
         publish_queue.put(('traffic.' + node_id, message))
-        time.sleep(2)
+        time.sleep(15)
 
 def publisher_thread():
     while True:

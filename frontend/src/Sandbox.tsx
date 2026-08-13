@@ -14,6 +14,8 @@ import { useTrafficWebSocket } from './hooks/useTrafficWebSocket';
 import { Link } from 'react-router-dom';
 import CustomJunctionNode from './CustomJunctionNode';
 import VehicleEdge from './VehicleEdge';
+import ExitNode from './ExitNode';
+import { addEdge, Connection } from 'reactflow';
 
 const initialNodes: Node[] = [
   { id: 'Node1', type: 'junction', position: { x: 200, y: 200 }, data: { label: 'Node1', light: 'Red' } },
@@ -34,11 +36,14 @@ export default function Sandbox() {
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [spawnCount, setSpawnCount] = useState<number>(5);
 
-  const nodeTypes = useMemo(() => ({ junction: CustomJunctionNode }), []);
+  const nodeTypes = useMemo(() => ({ junction: CustomJunctionNode, exit: ExitNode }), []);
   const edgeTypes = useMemo(() => ({ vehicle: VehicleEdge }), []);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => setNodes((nds) => applyNodeChanges(changes, nds)), []);
   const onEdgesChange = useCallback((changes: EdgeChange[]) => setEdges((eds) => applyEdgeChanges(changes, eds)), []);
+  const onConnect = useCallback((connection: Connection) => {
+    setEdges((eds) => addEdge({ ...connection, type: 'vehicle', data: { targetNodeId: connection.target, targetLight: 'Red' } }, eds));
+  }, [setEdges]);
 
   useEffect(() => {
     // Send topology updates for these nodes when mounted
@@ -58,12 +63,15 @@ export default function Sandbox() {
 
     setEdges(eds => eds.map(e => {
       const targetNode = realtimeNodes[e.target];
+      const targetNodeType = nodes.find(n => n.id === e.target)?.type;
+      
+      let updatedData = { ...e.data, targetNodeType };
       if (targetNode) {
-        return { ...e, data: { ...e.data, targetLight: targetNode.light } };
+        updatedData.targetLight = targetNode.light;
       }
-      return e;
+      return { ...e, data: updatedData };
     }));
-  }, [realtimeNodes]);
+  }, [realtimeNodes, nodes]);
 
   const reportWaitingCars = useCallback((_edgeId: string, targetNodeId: string, waitingCars: number) => {
     sendTopologyUpdate({
@@ -138,6 +146,8 @@ export default function Sandbox() {
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            isValidConnection={() => true}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             onEdgeClick={onEdgeClick}
