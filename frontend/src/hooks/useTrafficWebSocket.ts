@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 
 export interface TrafficData {
   node: string;
   density: number;
-  status: string;
+  status?: string;
+  light?: string;
   timestamp: number;
 }
 
@@ -13,7 +14,8 @@ export const useTrafficWebSocket = () => {
   const [nodes, setNodes] = useState<Record<string, TrafficData>>({});
   const [history, setHistory] = useState<TrafficData[]>([]);
   const [connected, setConnected] = useState(false);
-  
+  const clientRef = useRef<Client | null>(null);
+
   useEffect(() => {
     const client = new Client({
       webSocketFactory: () => new SockJS('http://localhost:8080/traffic-ws'),
@@ -56,11 +58,22 @@ export const useTrafficWebSocket = () => {
     });
 
     client.activate();
+    clientRef.current = client;
 
     return () => {
       client.deactivate();
+      clientRef.current = null;
     };
   }, []);
 
-  return { nodes, history, connected };
+  const sendTopologyUpdate = useCallback((msg: any) => {
+    if (clientRef.current && clientRef.current.connected) {
+      clientRef.current.publish({
+        destination: '/app/topology',
+        body: JSON.stringify(msg)
+      });
+    }
+  }, []);
+
+  return { nodes, history, connected, sendTopologyUpdate };
 };

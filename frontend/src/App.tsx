@@ -1,4 +1,5 @@
-import React from 'react';
+
+import { Link } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useTrafficWebSocket } from './hooks/useTrafficWebSocket';
 import './App.css';
@@ -6,7 +7,9 @@ import './App.css';
 function App() {
   const { nodes, history, connected } = useTrafficWebSocket();
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string | undefined, light: string | undefined) => {
+    if (light === 'Green') return '#4caf50';
+    if (light === 'Red') return '#f44336';
     switch(status) {
       case 'Normal': return '#4caf50';
       case 'Heavy': return '#ff9800';
@@ -27,26 +30,30 @@ function App() {
     <div className="dashboard-container">
       <header className="dashboard-header">
         <h1>TrafficFlow AI Dashboard</h1>
-        <span className={`status-badge ${connected ? 'connected' : 'disconnected'}`}>
-          {connected ? 'Connected' : 'Disconnected'}
-        </span>
+        <div>
+            <Link to="/sandbox" style={{ marginRight: 20, color: '#fff', textDecoration: 'underline' }}>Go to Sandbox</Link>
+            <span className={`status-badge ${connected ? 'connected' : 'disconnected'}`}>
+              {connected ? 'Connected' : 'Disconnected'}
+            </span>
+        </div>
       </header>
       <div className="nodes-grid">
         {Object.values(nodes).map((nodeData) => (
-          <div className="node-card" key={nodeData.node} style={{ borderTopColor: getStatusColor(nodeData.status) }}>
+          <div className="node-card" key={nodeData.node} style={{ borderTopColor: getStatusColor(nodeData.status, nodeData.light) }}>
             <h2>{nodeData.node}</h2>
             <div className="density-meter">
               <div 
                 className="density-fill" 
                 style={{ 
                   width: `${nodeData.density}%`, 
-                  backgroundColor: getStatusColor(nodeData.status) 
+                  backgroundColor: getStatusColor(nodeData.status, nodeData.light) 
                 }}
               ></div>
             </div>
             <div className="node-details">
               <p>Density: {nodeData.density}%</p>
-              <p>Status: <strong>{nodeData.status}</strong></p>
+              <p>Light: <strong>{nodeData.light || 'Unknown'}</strong></p>
+              <p>Status: <strong>{nodeData.status || 'N/A'}</strong></p>
               <p className="timestamp">Last updated: {new Date(nodeData.timestamp * 1000).toLocaleTimeString()}</p>
             </div>
           </div>
