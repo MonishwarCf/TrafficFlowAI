@@ -11,10 +11,11 @@ import { Link } from 'react-router-dom';
 import CustomJunctionNode from './CustomJunctionNode';
 import VehicleEdge from './VehicleEdge';
 import ExitNode from './ExitNode';
-import { useTrafficContext } from './TrafficContext';
+import StartNode from './StartNode';
+import { useTrafficContext, TransferBus } from './TrafficContext';
 
 export default function Sandbox() {
-  const { sendTopologyUpdate, nodes: realtimeNodes } = useTrafficWebSocket();
+  const { sendTopologyUpdate, nodes: realtimeNodes, connected } = useTrafficWebSocket();
   const { 
     nodes, setNodes, onNodesChange, 
     edges, setEdges, onEdgesChange, onConnect,
@@ -23,21 +24,27 @@ export default function Sandbox() {
   
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [spawnCount, setSpawnCount] = useState<number>(5);
+  const [avgWaitTime, setAvgWaitTime] = useState<number>(0);
+  const [totalCarsFinished, setTotalCarsFinished] = useState<number>(0);
 
-  const nodeTypes = useMemo(() => ({ junction: CustomJunctionNode, exit: ExitNode }), []);
+  const nodeTypes = useMemo(() => ({ junction: CustomJunctionNode, exit: ExitNode, start: StartNode }), []);
   const edgeTypes = useMemo(() => ({ vehicle: VehicleEdge }), []);
 
   const sentEdges = useRef<Set<string>>(new Set());
+  const sentNodes = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    // Send topology updates for these nodes when mounted
+    if (!connected) return;
     nodes.forEach(n => {
-      sendTopologyUpdate({ type: 'add_node', id: n.id });
+      if (!sentNodes.current.has(n.id) && n.type === 'junction') {
+        sentNodes.current.add(n.id);
+        sendTopologyUpdate({ type: 'add_node', id: n.id });
+      }
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sendTopologyUpdate]);
+  }, [nodes, sendTopologyUpdate, connected]);
 
   useEffect(() => {
+    if (!connected) return;
     edges.forEach(e => {
       if (!sentEdges.current.has(e.id)) {
         sentEdges.current.add(e.id);
@@ -52,56 +59,71 @@ export default function Sandbox() {
         });
       }
     });
-  }, [edges, sendTopologyUpdate]);
+  }, [edges, sendTopologyUpdate, connected]);
 
   useEffect(() => {
-    setNodes(nds => nds.map(n => {
-      const realTimeNode = realtimeNodes[n.id];
-      if (realTimeNode && realTimeNode.light !== n.data.light) {
-        return { ...n, data: { ...n.data, light: realTimeNode.light } };
-      }
-      return n;
-    }));
+    setNodes(nds => {
+      let hasChanges = false;
+      const newNds = nds.map(n => {
+        const realTimeNode = realtimeNodes[n.id];
+        if (realTimeNode && JSON.stringify(realTimeNode.light) !== JSON.stringify(n.data.light)) {
+          hasChanges = true;
+          return { ...n, data: { ...n.data, light: realTimeNode.light } };
+        }
+        return n;
+      });
+      return hasChanges ? newNds : nds;
+    });
 
-    setEdges(eds => eds.map(e => {
-      const targetNode = realtimeNodes[e.target];
-      const targetNodeType = nodes.find(n => n.id === e.target)?.type;
-      
-      let changed = false;
-      let updatedData = { ...e.data };
-      
-      if (updatedData.targetNodeType !== targetNodeType) {
-        updatedData.targetNodeType = targetNodeType;
-        changed = true;
-      }
-
-      const sourceNode = realtimeNodes[e.source];
-      if (sourceNode && typeof sourceNode.light === 'object') {
-        const handleDir = e.sourceHandle ? e.sourceHandle.split('_')[0] : 'S';
-        const newSourceLight = sourceNode.light[handleDir as keyof typeof sourceNode.light] || 'Red';
-        if (updatedData.sourceLight !== newSourceLight) {
-          updatedData.sourceLight = newSourceLight;
+    setEdges(eds => {
+      let hasEdgeChanges = false;
+      const newEds = eds.map(e => {
+        const targetNode = realtimeNodes[e.target];
+        const targetNodeType = nodes.find(n => n.id === e.target)?.type;
+        const sourceNodeType = nodes.find(n => n.id === e.source)?.type;
+        
+        let changed = false;
+        let updatedData = { ...e.data };
+        
+        if (updatedData.targetNodeType !== targetNodeType) {
+          updatedData.targetNodeType = targetNodeType;
           changed = true;
         }
-      } else if (sourceNode && updatedData.sourceLight !== sourceNode.light) {
-        updatedData.sourceLight = sourceNode.light;
-        changed = true;
-      }
-      
-      if (targetNode && typeof targetNode.light === 'object') {
-        const handleDir = e.targetHandle ? e.targetHandle.split('_')[0] : 'N';
-        const newTargetLight = targetNode.light[handleDir as keyof typeof targetNode.light] || 'Red';
-        if (updatedData.targetLight !== newTargetLight) {
-          updatedData.targetLight = newTargetLight;
+        if (updatedData.sourceNodeType !== sourceNodeType) {
+          updatedData.sourceNodeType = sourceNodeType;
           changed = true;
         }
-      } else if (targetNode && updatedData.targetLight !== targetNode.light) {
-        updatedData.targetLight = targetNode.light;
-        changed = true;
-      }
-      
-      return changed ? { ...e, data: updatedData } : e;
-    }));
+
+        const sourceNode = realtimeNodes[e.source];
+        if (sourceNode && typeof sourceNode.light === 'object') {
+          const handleDir = e.sourceHandle ? e.sourceHandle.split('_')[0] : 'S';
+          const newSourceLight = sourceNode.light[handleDir as keyof typeof sourceNode.light] || 'Red';
+          if (updatedData.sourceLight !== newSourceLight) {
+            updatedData.sourceLight = newSourceLight;
+            changed = true;
+          }
+        } else if (sourceNode && updatedData.sourceLight !== sourceNode.light) {
+          updatedData.sourceLight = sourceNode.light;
+          changed = true;
+        }
+        
+        if (targetNode && typeof targetNode.light === 'object') {
+          const handleDir = e.targetHandle ? e.targetHandle.split('_')[0] : 'N';
+          const newTargetLight = targetNode.light[handleDir as keyof typeof targetNode.light] || 'Red';
+          if (updatedData.targetLight !== newTargetLight) {
+            updatedData.targetLight = newTargetLight;
+            changed = true;
+          }
+        } else if (targetNode && updatedData.targetLight !== targetNode.light) {
+          updatedData.targetLight = targetNode.light;
+          changed = true;
+        }
+        
+        if (changed) hasEdgeChanges = true;
+        return changed ? { ...e, data: updatedData } : e;
+      });
+      return hasEdgeChanges ? newEds : eds;
+    });
   }, [realtimeNodes, setNodes, setEdges, nodes]);
 
   const reportWaitingCars = useCallback((_edgeId: string, targetNodeId: string, waitingCars: number) => {
@@ -120,6 +142,39 @@ export default function Sandbox() {
       return e;
     }));
   }, [reportWaitingCars, setEdges]);
+
+  const edgesRef = useRef(edges);
+  edgesRef.current = edges;
+
+  useEffect(() => {
+    const handleTransfer = (e: any) => {
+      const { nodeId, sourceEdgeId, color, speed } = e.detail;
+      const possibleEdges = edgesRef.current.filter(edge => 
+        edge.id !== sourceEdgeId && (edge.source === nodeId || edge.target === nodeId)
+      );
+      
+      if (possibleEdges.length > 0) {
+        const nextEdge = possibleEdges[Math.floor(Math.random() * possibleEdges.length)];
+        const direction = nextEdge.source === nodeId ? 1 : -1;
+        TransferBus.dispatchEvent(new CustomEvent(`spawn-${nextEdge.id}`, { detail: { color, speed, direction, startTime: e.detail.startTime, totalWaitTime: e.detail.totalWaitTime } }));
+      }
+    };
+    
+    const handleCompleted = (e: any) => {
+      const { waitTime } = e.detail;
+      setTotalCarsFinished(prevTotal => {
+        setAvgWaitTime(prevAvg => (prevAvg * prevTotal + waitTime) / (prevTotal + 1));
+        return prevTotal + 1;
+      });
+    };
+
+    TransferBus.addEventListener('transfer', handleTransfer);
+    TransferBus.addEventListener('vehicle_completed', handleCompleted);
+    return () => {
+       TransferBus.removeEventListener('transfer', handleTransfer);
+       TransferBus.removeEventListener('vehicle_completed', handleCompleted);
+    }
+  }, []);
 
   const onEdgeClick = (_event: React.MouseEvent, edge: Edge) => {
     if (isSpawnMode) {
@@ -151,7 +206,11 @@ export default function Sandbox() {
   const handleAddJunction = () => {
     const id = `Node${nodes.length + 1}`;
     setNodes(nds => [...nds, { id, type: 'junction', position: { x: Math.random() * 200 + 100, y: Math.random() * 200 + 100 }, data: { label: id, light: { N: 'Red', S: 'Red', E: 'Red', W: 'Red' } } }]);
-    sendTopologyUpdate({ type: 'add_node', id });
+  };
+
+  const handleAddStart = () => {
+    const id = `Start${nodes.length + 1}`;
+    setNodes(nds => [...nds, { id, type: 'start', position: { x: Math.random() * 200 + 50, y: Math.random() * 200 + 100 }, data: { label: id } }]);
   };
 
   const handleAddExit = () => {
@@ -163,12 +222,21 @@ export default function Sandbox() {
     setNodes([]);
     setEdges([]);
     setSelectedEdgeId(null);
+    setAvgWaitTime(0);
+    setTotalCarsFinished(0);
+    sentNodes.current.clear();
+    sentEdges.current.clear();
   };
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#121212', color: 'white' }}>
       <header style={{ padding: '15px 30px', backgroundColor: '#1a1a1a', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #333' }}>
-        <h2 style={{ margin: 0, color: '#4caf50' }}>Traffic AI Sandbox (React Flow)</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <h2 style={{ margin: 0, color: '#4caf50' }}>Traffic AI Sandbox (React Flow)</h2>
+          <div style={{ background: '#333', padding: '5px 15px', borderRadius: '4px', fontSize: '14px' }}>
+            Avg Wait Time: <strong style={{ color: '#ffeb3b' }}>{(avgWaitTime / 1000).toFixed(2)}s</strong> ({totalCarsFinished} cars)
+          </div>
+        </div>
         <div>
            <Link to="/" style={{ color: '#fff', textDecoration: 'none', padding: '8px 16px', backgroundColor: '#333', borderRadius: '4px' }}>Back to Dashboard</Link>
         </div>
@@ -218,6 +286,7 @@ export default function Sandbox() {
          >
            <Panel position="top-left" style={{ display: 'flex', gap: '10px', backgroundColor: 'rgba(0,0,0,0.5)', padding: '10px', borderRadius: '8px' }}>
              <button onClick={handleAddJunction} style={{ padding: '8px 16px', backgroundColor: '#2196F3', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>+ Add Junction</button>
+             <button onClick={handleAddStart} style={{ padding: '8px 16px', backgroundColor: '#4caf50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>+ Add Start Node</button>
              <button onClick={handleAddExit} style={{ padding: '8px 16px', backgroundColor: '#9C27B0', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>+ Add Exit Node</button>
              <button onClick={handleResetMap} style={{ padding: '8px 16px', backgroundColor: '#F44336', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Reset Map</button>
            </Panel>

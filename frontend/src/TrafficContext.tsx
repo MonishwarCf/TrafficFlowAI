@@ -13,17 +13,10 @@ interface TrafficContextType {
   setIsSpawnMode: (mode: boolean) => void;
 }
 
-const initialNodes: Node[] = [
-  { id: 'Node1', type: 'junction', position: { x: 200, y: 200 }, data: { label: 'Node1', light: { N: 'Red', S: 'Red', E: 'Red', W: 'Red' } } },
-  { id: 'Node2', type: 'junction', position: { x: 600, y: 200 }, data: { label: 'Node2', light: { N: 'Red', S: 'Red', E: 'Red', W: 'Red' } } },
-  { id: 'Node3', type: 'junction', position: { x: 400, y: 500 }, data: { label: 'Node3', light: { N: 'Red', S: 'Red', E: 'Red', W: 'Red' } } },
-];
+export const TransferBus = new EventTarget();
 
-const initialEdges: Edge[] = [
-  { id: 'e1-2', source: 'Node1', target: 'Node2', sourceHandle: 'E_out', targetHandle: 'W_in', type: 'vehicle', data: { targetNodeId: 'Node2', targetLight: 'Red' } },
-  { id: 'e2-3', source: 'Node2', target: 'Node3', sourceHandle: 'S_out', targetHandle: 'N_in', type: 'vehicle', data: { targetNodeId: 'Node3', targetLight: 'Red' } },
-  { id: 'e3-1', source: 'Node3', target: 'Node1', sourceHandle: 'N_out', targetHandle: 'S_in', type: 'vehicle', data: { targetNodeId: 'Node1', targetLight: 'Red' } },
-];
+const initialNodes: Node[] = [];
+const initialEdges: Edge[] = [];
 
 const TrafficContext = createContext<TrafficContextType | undefined>(undefined);
 

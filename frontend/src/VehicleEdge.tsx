@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { getSmoothStepPath, EdgeProps, BaseEdge } from 'reactflow';
+import { TransferBus } from './TrafficContext';
 
 export interface Vehicle {
   id: number;
@@ -8,10 +9,13 @@ export interface Vehicle {
   speed: number;
   stopped: boolean;
   direction: 1 | -1;
+  startTime: number;
+  totalWaitTime: number;
 }
 
 export default function VehicleEdge({
   id,
+  source,
   sourceX,
   sourceY,
   targetX,
@@ -38,12 +42,14 @@ export default function VehicleEdge({
   const lastSpawnTrigger = useRef(0);
 
   const targetNodeId = data?.targetNodeId;
+  const sourceNodeId = source;
   const targetLight = data?.targetLight || 'Red';
   const sourceLight = data?.sourceLight || 'Red';
   const spawnTrigger = data?.spawnTrigger || 0;
   const spawnCount = data?.spawnCount || 0;
   const reportWaitingCars = data?.reportWaitingCars;
   const targetNodeType = data?.targetNodeType;
+  const sourceNodeType = data?.sourceNodeType;
 
   useEffect(() => {
     if (spawnTrigger > lastSpawnTrigger.current) {
@@ -58,12 +64,32 @@ export default function VehicleEdge({
           color: `hsl(${Math.random() * 360}, 100%, 60%)`,
           speed: 1 + Math.random() * 1,
           stopped: false,
-          direction
+          direction,
+          startTime: Date.now(),
+          totalWaitTime: 0
         });
       }
       vehiclesRef.current = [...vehiclesRef.current, ...newCars];
     }
   }, [spawnTrigger, spawnCount]);
+
+  useEffect(() => {
+    const onSpawn = (e: any) => {
+      const { color, speed, direction, startTime, totalWaitTime } = e.detail;
+      vehiclesRef.current.push({
+        id: nextId.current++,
+        distance: -10,
+        color,
+        speed,
+        direction,
+        stopped: false,
+        startTime: startTime || Date.now(),
+        totalWaitTime: totalWaitTime || 0
+      });
+    };
+    TransferBus.addEventListener(`spawn-${id}`, onSpawn);
+    return () => TransferBus.removeEventListener(`spawn-${id}`, onSpawn);
+  }, [id]);
 
   useEffect(() => {
     let frameId: number;
@@ -94,7 +120,7 @@ export default function VehicleEdge({
         let stopped = false;
         
         const lightAtEnd = car.direction === 1 ? targetLight : sourceLight;
-        const isHeadingToExit = car.direction === 1 ? (targetNodeType === 'exit') : false;
+        const isHeadingToExit = car.direction === 1 ? (targetNodeType === 'exit') : (sourceNodeType === 'exit');
         
         if (isHeadingToExit) {
           if (distToNext < 5) stopped = true;
@@ -110,6 +136,8 @@ export default function VehicleEdge({
         
         if (!stopped) {
           car.distance += car.speed;
+        } else {
+          car.totalWaitTime += 16;
         }
 
         if (stopped && distToEnd >= 0 && distToEnd < 200 && !isHeadingToExit) {
@@ -118,8 +146,22 @@ export default function VehicleEdge({
       }
 
       vehiclesRef.current = vehiclesRef.current.filter(c => {
-        const isHeadingToExit = c.direction === 1 ? (targetNodeType === 'exit') : false;
-        if (isHeadingToExit && c.distance >= totalLength - 5) return false;
+        const isHeadingToExit = c.direction === 1 ? (targetNodeType === 'exit') : (sourceNodeType === 'exit');
+        if (isHeadingToExit && c.distance >= totalLength - 5) {
+           TransferBus.dispatchEvent(new CustomEvent('vehicle_completed', { 
+             detail: { waitTime: c.totalWaitTime, tripTime: Date.now() - c.startTime }
+           }));
+           return false;
+        }
+        
+        if (c.distance > totalLength + 5) {
+          const exitNode = c.direction === 1 ? targetNodeId : sourceNodeId;
+          TransferBus.dispatchEvent(new CustomEvent('transfer', { 
+            detail: { nodeId: exitNode, sourceEdgeId: id, color: c.color, speed: c.speed, startTime: c.startTime, totalWaitTime: c.totalWaitTime } 
+          }));
+          return false;
+        }
+        
         return c.distance < totalLength + 50;
       });
       
@@ -137,7 +179,7 @@ export default function VehicleEdge({
 
     frameId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(frameId);
-  }, [targetLight, sourceLight, id, targetNodeId, reportWaitingCars]);
+  }, [targetLight, sourceLight, id, targetNodeId, sourceNodeId, reportWaitingCars]);
 
   return (
     <g>
