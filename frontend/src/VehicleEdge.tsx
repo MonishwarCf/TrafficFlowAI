@@ -179,7 +179,7 @@ export default function VehicleEdge({
 
     frameId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(frameId);
-  }, [targetLight, sourceLight, id, targetNodeId, sourceNodeId, reportWaitingCars]);
+  }, [targetLight, sourceLight, id, targetNodeId, sourceNodeId, reportWaitingCars, targetNodeType, sourceNodeType]);
 
   return (
     <g>

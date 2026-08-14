@@ -32,6 +32,7 @@ export default function Sandbox() {
 
   const sentEdges = useRef<Set<string>>(new Set());
   const sentNodes = useRef<Set<string>>(new Set());
+  const nextNodeId = useRef<number>(1000);
 
   useEffect(() => {
     if (!connected) return;
@@ -204,17 +205,17 @@ export default function Sandbox() {
   };
 
   const handleAddJunction = () => {
-    const id = `Node${nodes.length + 1}`;
+    const id = `Node${nextNodeId.current++}`;
     setNodes(nds => [...nds, { id, type: 'junction', position: { x: Math.random() * 200 + 100, y: Math.random() * 200 + 100 }, data: { label: id, light: { N: 'Red', S: 'Red', E: 'Red', W: 'Red' } } }]);
   };
 
   const handleAddStart = () => {
-    const id = `Start${nodes.length + 1}`;
+    const id = `Start${nextNodeId.current++}`;
     setNodes(nds => [...nds, { id, type: 'start', position: { x: Math.random() * 200 + 50, y: Math.random() * 200 + 100 }, data: { label: id } }]);
   };
 
   const handleAddExit = () => {
-    const id = `Exit${nodes.length + 1}`;
+    const id = `Exit${nextNodeId.current++}`;
     setNodes(nds => [...nds, { id, type: 'exit', position: { x: Math.random() * 200 + 300, y: Math.random() * 200 + 100 }, data: { label: id } }]);
   };
 
@@ -226,6 +227,7 @@ export default function Sandbox() {
     setTotalCarsFinished(0);
     sentNodes.current.clear();
     sentEdges.current.clear();
+    sendTopologyUpdate({ type: 'reset' });
   };
 
   return (

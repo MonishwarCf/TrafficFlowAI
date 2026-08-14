@@ -27,10 +27,14 @@ class TrafficSignal:
         with self.lock:
             if not self.connected_directions[direction]:
                 self.connected_directions[direction] = True
+                current_active = self.active_phases[self.current_phase_index] if self.active_phases else None
+                
                 self.active_phases.append(direction)
-                # Keep phases ordered: N -> E -> S -> W
                 order = {'N': 0, 'E': 1, 'S': 2, 'W': 3}
                 self.active_phases.sort(key=lambda d: order[d])
+                
+                if current_active:
+                    self.current_phase_index = self.active_phases.index(current_active)
 
     def process(self):
         with self.lock:

@@ -85,7 +85,13 @@ def process_topology_message(ch, method, properties, body):
         msg_type = msg.get("type")
         
         with nodes_lock:
-            if msg_type == "add_node":
+            if msg_type == "reset":
+                for n_id, signal in nodes.items():
+                    signal.stop()
+                nodes.clear()
+                edges.clear()
+                print("Backend topology reset.")
+            elif msg_type == "add_node":
                 node_id = msg.get("id")
                 if node_id and node_id not in nodes:
                     nodes[node_id] = TrafficSignal(node_id)
