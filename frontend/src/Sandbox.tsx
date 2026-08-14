@@ -1,9 +1,8 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import ReactFlow, { 
   Background, 
   Controls,
   Panel,
-  Node, 
   Edge
 } from 'reactflow';
 import 'reactflow/dist/style.css';
@@ -28,6 +27,8 @@ export default function Sandbox() {
   const nodeTypes = useMemo(() => ({ junction: CustomJunctionNode, exit: ExitNode }), []);
   const edgeTypes = useMemo(() => ({ vehicle: VehicleEdge }), []);
 
+  const sentEdges = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     // Send topology updates for these nodes when mounted
     nodes.forEach(n => {
@@ -35,6 +36,23 @@ export default function Sandbox() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sendTopologyUpdate]);
+
+  useEffect(() => {
+    edges.forEach(e => {
+      if (!sentEdges.current.has(e.id)) {
+        sentEdges.current.add(e.id);
+        const sourceDir = e.sourceHandle ? e.sourceHandle.split('_')[0] : 'S';
+        const targetDir = e.targetHandle ? e.targetHandle.split('_')[0] : 'N';
+        sendTopologyUpdate({ 
+          type: 'add_edge', 
+          source: e.source, 
+          target: e.target,
+          sourceDir,
+          targetDir
+        });
+      }
+    });
+  }, [edges, sendTopologyUpdate]);
 
   useEffect(() => {
     setNodes(nds => nds.map(n => {
@@ -56,8 +74,28 @@ export default function Sandbox() {
         updatedData.targetNodeType = targetNodeType;
         changed = true;
       }
+
+      const sourceNode = realtimeNodes[e.source];
+      if (sourceNode && typeof sourceNode.light === 'object') {
+        const handleDir = e.sourceHandle ? e.sourceHandle.split('_')[0] : 'S';
+        const newSourceLight = sourceNode.light[handleDir as keyof typeof sourceNode.light] || 'Red';
+        if (updatedData.sourceLight !== newSourceLight) {
+          updatedData.sourceLight = newSourceLight;
+          changed = true;
+        }
+      } else if (sourceNode && updatedData.sourceLight !== sourceNode.light) {
+        updatedData.sourceLight = sourceNode.light;
+        changed = true;
+      }
       
-      if (targetNode && updatedData.targetLight !== targetNode.light) {
+      if (targetNode && typeof targetNode.light === 'object') {
+        const handleDir = e.targetHandle ? e.targetHandle.split('_')[0] : 'N';
+        const newTargetLight = targetNode.light[handleDir as keyof typeof targetNode.light] || 'Red';
+        if (updatedData.targetLight !== newTargetLight) {
+          updatedData.targetLight = newTargetLight;
+          changed = true;
+        }
+      } else if (targetNode && updatedData.targetLight !== targetNode.light) {
         updatedData.targetLight = targetNode.light;
         changed = true;
       }
@@ -112,7 +150,7 @@ export default function Sandbox() {
 
   const handleAddJunction = () => {
     const id = `Node${nodes.length + 1}`;
-    setNodes(nds => [...nds, { id, type: 'junction', position: { x: Math.random() * 200 + 100, y: Math.random() * 200 + 100 }, data: { label: id, light: 'Red' } }]);
+    setNodes(nds => [...nds, { id, type: 'junction', position: { x: Math.random() * 200 + 100, y: Math.random() * 200 + 100 }, data: { label: id, light: { N: 'Red', S: 'Red', E: 'Red', W: 'Red' } } }]);
     sendTopologyUpdate({ type: 'add_node', id });
   };
 

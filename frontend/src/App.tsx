@@ -7,9 +7,14 @@ import './App.css';
 function App() {
   const { nodes, history, connected } = useTrafficWebSocket();
 
-  const getStatusColor = (status: string | undefined, light: string | undefined) => {
-    if (light === 'Green') return '#4caf50';
-    if (light === 'Red') return '#f44336';
+  const getStatusColor = (status: string | undefined, light: string | Record<string, string> | undefined) => {
+    let dominantLight = light;
+    if (typeof light === 'object') {
+      // Just pick North or the first green light to represent status color
+      dominantLight = Object.values(light).includes('Green') ? 'Green' : 'Red';
+    }
+    if (dominantLight === 'Green') return '#4caf50';
+    if (dominantLight === 'Red') return '#f44336';
     switch(status) {
       case 'Normal': return '#4caf50';
       case 'Heavy': return '#ff9800';
@@ -52,7 +57,7 @@ function App() {
             </div>
             <div className="node-details">
               <p>Density: {nodeData.density}%</p>
-              <p>Light: <strong>{nodeData.light || 'Unknown'}</strong></p>
+              <p>Light: <strong>{typeof nodeData.light === 'object' ? Object.entries(nodeData.light).map(([k,v]) => `${k}:${v}`).join(' ') : (nodeData.light || 'Unknown')}</strong></p>
               <p>Status: <strong>{nodeData.status || 'N/A'}</strong></p>
               <p className="timestamp">Last updated: {new Date(nodeData.timestamp * 1000).toLocaleTimeString()}</p>
             </div>

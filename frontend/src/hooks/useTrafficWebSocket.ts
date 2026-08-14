@@ -6,7 +6,7 @@ export interface TrafficData {
   node: string;
   density: number;
   status?: string;
-  light?: string;
+  light?: string | Record<string, string>;
   timestamp: number;
 }
 

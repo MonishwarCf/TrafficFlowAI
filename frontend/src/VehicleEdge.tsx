@@ -7,6 +7,7 @@ export interface Vehicle {
   color: string;
   speed: number;
   stopped: boolean;
+  direction: 1 | -1;
 }
 
 export default function VehicleEdge({
@@ -38,6 +39,7 @@ export default function VehicleEdge({
 
   const targetNodeId = data?.targetNodeId;
   const targetLight = data?.targetLight || 'Red';
+  const sourceLight = data?.sourceLight || 'Red';
   const spawnTrigger = data?.spawnTrigger || 0;
   const spawnCount = data?.spawnCount || 0;
   const reportWaitingCars = data?.reportWaitingCars;
@@ -49,12 +51,14 @@ export default function VehicleEdge({
       
       const newCars: Vehicle[] = [];
       for(let i = 0; i < spawnCount; i++) {
+        const direction = i % 2 === 0 ? 1 : -1;
         newCars.push({
           id: nextId.current++,
-          distance: -20 - i * 35, // spacing
+          distance: -20 - Math.floor(i/2) * 35,
           color: `hsl(${Math.random() * 360}, 100%, 60%)`,
           speed: 1 + Math.random() * 1,
-          stopped: false
+          stopped: false,
+          direction
         });
       }
       vehiclesRef.current = [...vehiclesRef.current, ...newCars];
@@ -79,18 +83,23 @@ export default function VehicleEdge({
         const car = vehiclesRef.current[i];
         
         let distToNext = Infinity;
-        if (i > 0) {
-           const carInFront = vehiclesRef.current[i - 1];
+        const sameDirCars = vehiclesRef.current.filter(c => c.direction === car.direction);
+        const myIndex = sameDirCars.indexOf(car);
+        if (myIndex > 0) {
+           const carInFront = sameDirCars[myIndex - 1];
            distToNext = carInFront.distance - car.distance - 25; // car length + gap
         }
 
         const distToEnd = totalLength - car.distance;
         let stopped = false;
         
-        if (targetNodeType === 'exit') {
+        const lightAtEnd = car.direction === 1 ? targetLight : sourceLight;
+        const isHeadingToExit = car.direction === 1 ? (targetNodeType === 'exit') : false;
+        
+        if (isHeadingToExit) {
           if (distToNext < 5) stopped = true;
         } else {
-          if (distToEnd < 30 && targetLight === 'Red') {
+          if (distToEnd < 30 && lightAtEnd === 'Red') {
             stopped = true;
           } else if (distToNext < 5) {
             stopped = true;
@@ -103,13 +112,14 @@ export default function VehicleEdge({
           car.distance += car.speed;
         }
 
-        if (stopped && distToEnd >= 0 && distToEnd < 200 && targetNodeType !== 'exit') {
+        if (stopped && distToEnd >= 0 && distToEnd < 200 && !isHeadingToExit) {
           waitingCount++;
         }
       }
 
       vehiclesRef.current = vehiclesRef.current.filter(c => {
-        if (targetNodeType === 'exit' && c.distance >= totalLength - 5) return false;
+        const isHeadingToExit = c.direction === 1 ? (targetNodeType === 'exit') : false;
+        if (isHeadingToExit && c.distance >= totalLength - 5) return false;
         return c.distance < totalLength + 50;
       });
       
@@ -117,7 +127,7 @@ export default function VehicleEdge({
 
       if (time - lastReportTime > 500) {
         if (reportWaitingCars && targetNodeId) {
-          reportWaitingCars(id, targetNodeId, waitingCount);
+          reportWaitingCars(id, targetNodeId, waitingCount); // This still reports all waiting cars on edge to target.
         }
         lastReportTime = time;
       }
@@ -127,7 +137,7 @@ export default function VehicleEdge({
 
     frameId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(frameId);
-  }, [targetLight, id, targetNodeId, reportWaitingCars]);
+  }, [targetLight, sourceLight, id, targetNodeId, reportWaitingCars]);
 
   return (
     <g>
@@ -146,19 +156,31 @@ export default function VehicleEdge({
         const length = pathRef.current.getTotalLength();
         if (car.distance > length) return null;
 
-        const point = pathRef.current.getPointAtLength(car.distance);
-        const nextPoint = pathRef.current.getPointAtLength(Math.min(car.distance + 1, length));
-        const angle = Math.atan2(nextPoint.y - point.y, nextPoint.x - point.x) * (180 / Math.PI);
+        const pointDist = car.direction === 1 ? car.distance : length - car.distance;
+        const point = pathRef.current.getPointAtLength(pointDist);
+        const nextDist = car.direction === 1 ? Math.min(car.distance + 1, length) : Math.max(length - car.distance - 1, 0);
+        const nextPoint = pathRef.current.getPointAtLength(nextDist);
+        
+        const dx = nextPoint.x - point.x;
+        const dy = nextPoint.y - point.y;
+        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+        
+        const len = Math.hypot(dx, dy) || 1;
+        const nx = -dy / len;
+        const ny = dx / len;
+        const offsetDist = 8;
+        const offsetX = nx * offsetDist;
+        const offsetY = ny * offsetDist;
 
         return (
           <rect 
             key={car.id}
-            x={point.x - 10} 
-            y={point.y - 6} 
+            x={point.x - 10 + offsetX} 
+            y={point.y - 6 + offsetY} 
             width={20} 
             height={12} 
             fill={car.color}
-            transform={`rotate(${angle} ${point.x} ${point.y})`}
+            transform={`rotate(${angle} ${point.x + offsetX} ${point.y + offsetY})`}
             style={{ transition: 'none' }}
           />
         );

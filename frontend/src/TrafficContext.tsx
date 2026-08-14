@@ -14,15 +14,15 @@ interface TrafficContextType {
 }
 
 const initialNodes: Node[] = [
-  { id: 'Node1', type: 'junction', position: { x: 200, y: 200 }, data: { label: 'Node1', light: 'Red' } },
-  { id: 'Node2', type: 'junction', position: { x: 600, y: 200 }, data: { label: 'Node2', light: 'Red' } },
-  { id: 'Node3', type: 'junction', position: { x: 400, y: 500 }, data: { label: 'Node3', light: 'Red' } },
+  { id: 'Node1', type: 'junction', position: { x: 200, y: 200 }, data: { label: 'Node1', light: { N: 'Red', S: 'Red', E: 'Red', W: 'Red' } } },
+  { id: 'Node2', type: 'junction', position: { x: 600, y: 200 }, data: { label: 'Node2', light: { N: 'Red', S: 'Red', E: 'Red', W: 'Red' } } },
+  { id: 'Node3', type: 'junction', position: { x: 400, y: 500 }, data: { label: 'Node3', light: { N: 'Red', S: 'Red', E: 'Red', W: 'Red' } } },
 ];
 
 const initialEdges: Edge[] = [
-  { id: 'e1-2', source: 'Node1', target: 'Node2', type: 'vehicle', data: { targetNodeId: 'Node2', targetLight: 'Red' } },
-  { id: 'e2-3', source: 'Node2', target: 'Node3', type: 'vehicle', data: { targetNodeId: 'Node3', targetLight: 'Red' } },
-  { id: 'e3-1', source: 'Node3', target: 'Node1', type: 'vehicle', data: { targetNodeId: 'Node1', targetLight: 'Red' } },
+  { id: 'e1-2', source: 'Node1', target: 'Node2', sourceHandle: 'E_out', targetHandle: 'W_in', type: 'vehicle', data: { targetNodeId: 'Node2', targetLight: 'Red' } },
+  { id: 'e2-3', source: 'Node2', target: 'Node3', sourceHandle: 'S_out', targetHandle: 'N_in', type: 'vehicle', data: { targetNodeId: 'Node3', targetLight: 'Red' } },
+  { id: 'e3-1', source: 'Node3', target: 'Node1', sourceHandle: 'N_out', targetHandle: 'S_in', type: 'vehicle', data: { targetNodeId: 'Node1', targetLight: 'Red' } },
 ];
 
 const TrafficContext = createContext<TrafficContextType | undefined>(undefined);
@@ -35,7 +35,16 @@ export function TrafficProvider({ children }: { children: ReactNode }) {
   const onNodesChange = useCallback((changes: NodeChange[]) => setNodes((nds) => applyNodeChanges(changes, nds)), []);
   const onEdgesChange = useCallback((changes: EdgeChange[]) => setEdges((eds) => applyEdgeChanges(changes, eds)), []);
   const onConnect = useCallback((connection: Connection) => {
-    setEdges((eds) => addEdge({ ...connection, type: 'vehicle', data: { targetNodeId: connection.target, targetLight: 'Red' } }, eds));
+    setEdges((eds) => addEdge({ 
+      ...connection, 
+      type: 'vehicle', 
+      data: { 
+        targetNodeId: connection.target, 
+        targetLight: 'Red',
+        sourceHandle: connection.sourceHandle,
+        targetHandle: connection.targetHandle
+      } 
+    }, eds));
   }, []);
 
   return (

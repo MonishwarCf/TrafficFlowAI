@@ -15,8 +15,10 @@ export default function ExitNode() {
       fontWeight: 'bold',
       textShadow: '1px 1px 2px #000'
     }}>
-      <Handle type="target" position={Position.Left} style={{ background: '#555' }} />
-      <Handle type="source" position={Position.Right} style={{ background: '#555' }} />
+      <Handle type="target" position={Position.Left} style={{ width: 24, height: 24, left: -12, borderRadius: '50%', backgroundColor: '#4caf50', border: '2px solid white', zIndex: 20 }} />
+      <Handle type="source" position={Position.Right} style={{ width: 24, height: 24, right: -12, borderRadius: '50%', backgroundColor: '#2196F3', border: '2px solid white', zIndex: 20 }} />
+      <Handle type="target" position={Position.Top} style={{ width: 24, height: 24, top: -12, borderRadius: '50%', backgroundColor: '#4caf50', border: '2px solid white', zIndex: 20 }} />
+      <Handle type="target" position={Position.Bottom} style={{ width: 24, height: 24, bottom: -12, borderRadius: '50%', backgroundColor: '#4caf50', border: '2px solid white', zIndex: 20 }} />
       FINISH
     </div>
   );

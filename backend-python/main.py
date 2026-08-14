@@ -5,6 +5,7 @@ import random
 import threading
 import os
 from dotenv import load_dotenv
+from traffic_signal import TrafficSignal
 from fastapi import FastAPI
 import uvicorn
 import queue
@@ -18,44 +19,39 @@ EXCHANGE_NAME = os.getenv('EXCHANGE_NAME', 'traffic_exchange')
 QUEUE_NAME = os.getenv('QUEUE_NAME', 'traffic_queue')
 TOPOLOGY_QUEUE = 'traffic.topology'
 
-nodes = {} # node_id -> {"thread": Thread, "light": "Green", "active": True}
+nodes = {} # node_id -> TrafficSignal
 edges = {} # node_id -> set of connected node_ids
 nodes_lock = threading.Lock()
 publish_queue = queue.Queue()
 
 def node_simulator(node_id):
     print(f"Started simulator for node {node_id}")
-    with nodes_lock:
-        if node_id in nodes:
-            nodes[node_id]["density"] = 0
-            nodes[node_id]["incoming"] = 0
-            nodes[node_id]["light"] = "Red"
-            nodes[node_id]["light_ticks"] = 0
-
+    
     while True:
         try:
             with nodes_lock:
-                if node_id not in nodes or not nodes[node_id]["active"]:
+                if node_id not in nodes or not nodes[node_id].active:
                     break
+                signal = nodes[node_id]
                 
-                current_light = nodes[node_id].get("light", "Red")
-                new_light = "Green" if current_light == "Red" else "Red"
-                nodes[node_id]["light"] = new_light
-                
-                density = nodes[node_id].get("density", 0)
-                
+            # Process cycle (runs every 1 second simulated)
+            signal.process()
+            signal.action_doer()
+            
+            state = signal.get_state()
+            
             message = {
                 'type': 'LIGHT_UPDATE',
                 'node': node_id,
-                'density': density,
-                'light': new_light,
+                'density': state['density'],
+                'light': state['light'],
                 'timestamp': time.time()
             }
             
             publish_queue.put(('traffic.' + node_id, message))
         except Exception as e:
             print(f"Error in node_simulator {node_id}: {e}")
-        time.sleep(15)
+        time.sleep(1) # Faster simulation cycle so 10s phases feel responsive
 
 def publisher_thread():
     while True:
@@ -92,17 +88,27 @@ def process_topology_message(ch, method, properties, body):
             if msg_type == "add_node":
                 node_id = msg.get("id")
                 if node_id and node_id not in nodes:
-                    nodes[node_id] = {"active": True, "override": None}
+                    nodes[node_id] = TrafficSignal(node_id)
+                    # By default assume all nodes have N, S, E, W just in case
+                    # But we'll rely on add_edge to add true connections.
                     t = threading.Thread(target=node_simulator, args=(node_id,), daemon=True)
                     t.start()
                     
             elif msg_type == "add_edge":
                 src = msg.get("source")
                 tgt = msg.get("target")
+                src_dir = msg.get("sourceDir", "S") # Default S outgoing
+                tgt_dir = msg.get("targetDir", "N") # Default N incoming
+                
                 if src not in edges: edges[src] = set()
                 if tgt not in edges: edges[tgt] = set()
                 edges[src].add(tgt)
                 edges[tgt].add(src)
+                
+                if src in nodes:
+                    nodes[src].add_connection(src_dir)
+                if tgt in nodes:
+                    nodes[tgt].add_connection(tgt_dir)
                 
             elif msg_type == "add_vehicle":
                 v_type = msg.get("vehicleType")
@@ -116,16 +122,15 @@ def process_topology_message(ch, method, properties, body):
                     
                     for t in targets:
                         if t in nodes:
-                            nodes[t]["override"] = "Green"
-                            nodes[t]["override_time"] = 5 # force green for next 5 ticks
+                            nodes[t].set_override("Green", 5) # force green for next 5 ticks
             elif msg_type == "vision_sensor":
                 n_id = msg.get("nodeId")
                 if n_id in nodes:
-                    nodes[n_id]["density"] = msg.get("waitingCars", 0)
+                    nodes[n_id].update_density(msg.get("waitingCars", 0))
             elif msg_type == "proactive_message":
                 tgt = msg.get("target")
                 if tgt in nodes:
-                    nodes[tgt]["incoming"] += msg.get("count", 0)
+                    nodes[tgt].add_incoming(msg.get("count", 0))
                     print(f"Node {tgt} received proactive alert: {msg.get('count')} cars incoming from {msg.get('source')}!")
     except Exception as e:
         print(f"Error processing topology msg: {e}")
