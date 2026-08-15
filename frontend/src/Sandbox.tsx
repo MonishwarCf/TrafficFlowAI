@@ -24,9 +24,10 @@ export default function Sandbox() {
   
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [spawnCount, setSpawnCount] = useState<number>(5);
-  const [avgWaitTime, setAvgWaitTime] = useState<number>(0);
   const [totalCarsFinished, setTotalCarsFinished] = useState<number>(0);
   const [globalMode, setGlobalMode] = useState<'STATIC' | 'AI'>('STATIC');
+  const [cityPainIndex, setCityPainIndex] = useState<number>(0);
+  const [spawnAmbulance, setSpawnAmbulance] = useState<boolean>(false);
 
   const nodeTypes = useMemo(() => ({ junction: CustomJunctionNode, exit: ExitNode, start: StartNode }), []);
   const edgeTypes = useMemo(() => ({ vehicle: VehicleEdge }), []);
@@ -153,31 +154,42 @@ export default function Sandbox() {
 
   useEffect(() => {
     const handleTransfer = (e: any) => {
-      const { nodeId, sourceEdgeId, color, speed } = e.detail;
+      const { nodeId, sourceEdgeId, color, speed, startTime, totalWaitTime, type } = e.detail;
       const possibleEdges = edgesRef.current.filter(edge => 
         edge.id !== sourceEdgeId && (edge.source === nodeId || edge.target === nodeId)
       );
       
       if (possibleEdges.length > 0) {
-        const nextEdge = possibleEdges[Math.floor(Math.random() * possibleEdges.length)];
-        const direction = nextEdge.source === nodeId ? 1 : -1;
-        TransferBus.dispatchEvent(new CustomEvent(`spawn-${nextEdge.id}`, { detail: { color, speed, direction, startTime: e.detail.startTime, totalWaitTime: e.detail.totalWaitTime } }));
+        const targetEdge = possibleEdges[Math.floor(Math.random() * possibleEdges.length)];
+        const direction = targetEdge.source === nodeId ? 1 : -1;
+        
+        TransferBus.dispatchEvent(new CustomEvent(`spawn-${targetEdge.id}`, { 
+          detail: { color, speed, direction, startTime, totalWaitTime, type }
+        }));
       }
     };
     
-    const handleCompleted = (e: any) => {
-      const { waitTime } = e.detail;
-      setTotalCarsFinished(prevTotal => {
-        setAvgWaitTime(prevAvg => (prevAvg * prevTotal + waitTime) / (prevTotal + 1));
-        return prevTotal + 1;
-      });
+    const handleCompleted = () => {
+      setTotalCarsFinished(prevTotal => prevTotal + 1);
     };
 
     TransferBus.addEventListener('transfer', handleTransfer);
     TransferBus.addEventListener('vehicle_completed', handleCompleted);
+
+    const painMap = new Map<string, number>();
+    const handlePainReport = (e: any) => {
+      const { edgeId, pain } = e.detail;
+      painMap.set(edgeId, pain);
+      let total = 0;
+      painMap.forEach(v => total += v);
+      setCityPainIndex(total);
+    };
+    TransferBus.addEventListener('pain_report', handlePainReport);
+
     return () => {
        TransferBus.removeEventListener('transfer', handleTransfer);
        TransferBus.removeEventListener('vehicle_completed', handleCompleted);
+       TransferBus.removeEventListener('pain_report', handlePainReport);
     }
   }, []);
 
@@ -195,13 +207,14 @@ export default function Sandbox() {
     if (!selectedEdgeId) return;
     setEdges(eds => eds.map(e => {
       if (e.id === selectedEdgeId) {
-        return {
-          ...e,
-          data: {
-            ...e.data,
-            spawnTrigger: (e.data.spawnTrigger || 0) + 1,
-            spawnCount: spawnCount
-          }
+        return { 
+          ...e, 
+          data: { 
+            ...e.data, 
+            spawnTrigger: Date.now(), 
+            spawnCount,
+            spawnType: spawnAmbulance ? 'Ambulance' : 'Car'
+          } 
         };
       }
       return e;
@@ -227,7 +240,6 @@ export default function Sandbox() {
     setNodes([]);
     setEdges([]);
     setSelectedEdgeId(null);
-    setAvgWaitTime(0);
     setTotalCarsFinished(0);
     sentNodes.current.clear();
     sentEdges.current.clear();
@@ -246,7 +258,8 @@ export default function Sandbox() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           <h2 style={{ margin: 0, color: '#4caf50' }}>Traffic AI Sandbox (React Flow)</h2>
           <div style={{ background: '#333', padding: '5px 15px', borderRadius: '4px', fontSize: '14px' }}>
-            Avg Wait Time: <strong style={{ color: '#ffeb3b' }}>{(avgWaitTime / 1000).toFixed(2)}s</strong> ({totalCarsFinished} cars)
+            City Pain Index: <strong style={{ color: '#ffeb3b', fontSize: '18px' }}>{Math.round(cityPainIndex)}</strong> 
+            <span style={{ marginLeft: '10px', color: '#888' }}>(Throughput: {totalCarsFinished})</span>
           </div>
         </div>
         <div>
@@ -270,12 +283,16 @@ export default function Sandbox() {
          >
            Inject Vehicles
          </button>
-         <div style={{ marginLeft: 'auto', display: 'flex', gap: '10px', alignItems: 'center' }}>
-           <label>
-             <input type="checkbox" checked={isSpawnMode} onChange={e => setIsSpawnMode(e.target.checked)} style={{ marginRight: '8px' }} />
-             Spawn Mode
-           </label>
-         </div>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <label>
+              <input type="checkbox" checked={isSpawnMode} onChange={e => setIsSpawnMode(e.target.checked)} style={{ marginRight: '8px' }} />
+              Spawn Mode
+            </label>
+            <label style={{ marginLeft: '15px', color: '#ff5252', fontWeight: 'bold' }}>
+              <input type="checkbox" checked={spawnAmbulance} onChange={e => setSpawnAmbulance(e.target.checked)} style={{ marginRight: '8px' }} />
+              +Ambulance
+            </label>
+          </div>
       </div>
 
       <div style={{ flexGrow: 1, position: 'relative' }}>

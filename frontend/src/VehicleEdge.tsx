@@ -48,6 +48,7 @@ export default function VehicleEdge({
   const sourceLight = data?.sourceLight || 'Red';
   const spawnTrigger = data?.spawnTrigger || 0;
   const spawnCount = data?.spawnCount || 0;
+  const spawnType = data?.spawnType || 'Car';
   const reportWaitingCars = data?.reportWaitingCars;
   const targetNodeType = data?.targetNodeType;
   const sourceNodeType = data?.sourceNodeType;
@@ -61,24 +62,27 @@ export default function VehicleEdge({
       const newCars: Vehicle[] = [];
       for(let i = 0; i < spawnCount; i++) {
         const direction = i % 2 === 0 ? 1 : -1;
+        const isAmb = (i === 0 && spawnType === 'Ambulance');
+        
         newCars.push({
           id: nextId.current++,
           distance: -20 - Math.floor(i/2) * 35,
-          color: `hsl(${Math.random() * 360}, 100%, 60%)`,
-          speed: 1 + Math.random() * 1,
+          color: isAmb ? '#ff0000' : `hsl(${Math.random() * 360}, 100%, 60%)`,
+          speed: isAmb ? 2 : (1 + Math.random() * 1),
           stopped: false,
           direction,
           startTime: Date.now(),
-          totalWaitTime: 0
+          totalWaitTime: 0,
+          type: isAmb ? 'Ambulance' : 'Car'
         });
       }
       vehiclesRef.current = [...vehiclesRef.current, ...newCars];
     }
-  }, [spawnTrigger, spawnCount]);
+  }, [spawnTrigger, spawnCount, spawnType]);
 
   useEffect(() => {
     const onSpawn = (e: any) => {
-      const { color, speed, direction, startTime, totalWaitTime } = e.detail;
+      const { color, speed, direction, startTime, totalWaitTime, type } = e.detail;
       vehiclesRef.current.push({
         id: nextId.current++,
         distance: -10,
@@ -87,7 +91,8 @@ export default function VehicleEdge({
         direction,
         stopped: false,
         startTime: startTime || Date.now(),
-        totalWaitTime: totalWaitTime || 0
+        totalWaitTime: totalWaitTime || 0,
+        type: type || 'Car'
       });
     };
     TransferBus.addEventListener(`spawn-${id}`, onSpawn);
@@ -110,6 +115,7 @@ export default function VehicleEdge({
       let waitingSource = 0;
       let ambTarget = false;
       let ambSource = false;
+      let localPainIndex = 0;
 
       for (let i = 0; i < vehiclesRef.current.length; i++) {
         const car = vehiclesRef.current[i];
@@ -146,6 +152,9 @@ export default function VehicleEdge({
           car.totalWaitTime += 16;
         }
 
+        const weight = car.type === 'Ambulance' ? 50 : 1;
+        localPainIndex += (car.totalWaitTime / 1000) * weight;
+
         if (stopped && distToEnd >= 0 && distToEnd < 200 && !isHeadingToExit) {
           if (car.direction === 1) {
              waitingTarget++;
@@ -169,7 +178,7 @@ export default function VehicleEdge({
         if (c.distance > totalLength + 5) {
           const exitNode = c.direction === 1 ? targetNodeId : sourceNodeId;
           TransferBus.dispatchEvent(new CustomEvent('transfer', { 
-            detail: { nodeId: exitNode, sourceEdgeId: id, color: c.color, speed: c.speed, startTime: c.startTime, totalWaitTime: c.totalWaitTime } 
+            detail: { nodeId: exitNode, sourceEdgeId: id, color: c.color, speed: c.speed, startTime: c.startTime, totalWaitTime: c.totalWaitTime, type: c.type } 
           }));
           return false;
         }
@@ -180,6 +189,10 @@ export default function VehicleEdge({
       setVehicles([...vehiclesRef.current]);
 
       if (time - lastReportTime > 500) {
+        TransferBus.dispatchEvent(new CustomEvent('pain_report', { 
+            detail: { edgeId: id, pain: localPainIndex } 
+        }));
+
         if (reportWaitingCars) {
           if (targetNodeId) {
              const densityTarget = Math.min(1.0, waitingTarget / 15.0);
