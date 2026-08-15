@@ -80,6 +80,11 @@ class TrafficSignal:
                 self.ai_phase_timer += 1
 
                 if self.ai_phase_timer >= self.ai_phase_duration:
+                    # Calculate reward for the just-completed phase
+                    total_waiting = sum(data.get('car_count', 0) for data in self.cv_telemetry.values())
+                    reward = -total_waiting # We want to minimize cars waiting
+                    self.ai.update_q_value(reward)
+
                     self.ai_phase_timer = 0
                     self.incoming = 0 # Reset incoming count when we switch phases
                     self.current_phase_index = (self.current_phase_index + 1) % len(self.active_phases)
@@ -158,7 +163,9 @@ class TrafficSignal:
                 'active_phases': list(self.active_phases),
                 'mode': self.operating_mode,
                 'cv_telemetry': self.cv_telemetry.copy(),
-                'remaining_time': remaining
+                'remaining_time': remaining,
+                'ai_action': self.ai.last_action,
+                'ai_reward': self.ai.last_loss
             }
 
     def pop_logs(self):

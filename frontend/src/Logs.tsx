@@ -66,7 +66,26 @@ export default function Logs() {
               </p>
               
               <h4 style={{ margin: '20px 0 10px 0', borderBottom: '1px solid #444', paddingBottom: '5px' }}>Live Status</h4>
-              <p style={{ margin: '0 0 10px 0' }}><strong>Proactive Incoming:</strong> {selectedNodeData.incoming || 0} messages pending</p>
+              <div style={{ display: 'flex', gap: '20px', marginBottom: '15px', backgroundColor: '#111', padding: '10px', borderRadius: '4px' }}>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#888', textTransform: 'uppercase' }}>Proactive Incoming</div>
+                  <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#ffb300' }}>{selectedNodeData.incoming || 0} msgs</div>
+                </div>
+                {selectedNodeData.mode === 'AI' && (
+                  <>
+                    <div>
+                      <div style={{ fontSize: '11px', color: '#888', textTransform: 'uppercase' }}>AI Chosen Phase Duration</div>
+                      <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#4caf50' }}>{selectedNodeData.ai_action !== undefined ? `${selectedNodeData.ai_action}s` : 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', color: '#888', textTransform: 'uppercase' }}>AI Latest Reward (Loss)</div>
+                      <div style={{ fontSize: '16px', fontWeight: 'bold', color: selectedNodeData.ai_reward && selectedNodeData.ai_reward < 0 ? '#f44336' : '#4caf50' }}>
+                        {selectedNodeData.ai_reward !== undefined ? selectedNodeData.ai_reward : 'N/A'}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
               {selectedNodeData.cv_telemetry ? (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                   {Object.entries(selectedNodeData.cv_telemetry).map(([dir, data]: [string, any]) => {

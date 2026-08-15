@@ -51,7 +51,9 @@ def node_simulator(node_id):
                 'logs': logs,
                 'cv_telemetry': state.get('cv_telemetry', {}),
                 'remaining_time': state.get('remaining_time', 0),
-                'incoming': state.get('incoming', 0)
+                'incoming': state.get('incoming', 0),
+                'ai_action': state.get('ai_action'),
+                'ai_reward': state.get('ai_reward')
             }
             
             publish_queue.put(('traffic.' + node_id, message))
