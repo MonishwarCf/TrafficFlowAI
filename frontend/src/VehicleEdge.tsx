@@ -124,6 +124,7 @@ export default function VehicleEdge({
   useEffect(() => {
     let frameId: number;
     let lastReportTime = 0;
+    let lastTime = 0;
 
     const animate = (time: number) => {
       const path = pathRef.current;
@@ -131,6 +132,16 @@ export default function VehicleEdge({
         frameId = requestAnimationFrame(animate);
         return;
       }
+
+      if (lastTime === 0) {
+        lastTime = time;
+      }
+      const rawDt = time - lastTime;
+      lastTime = time;
+
+      // Normalize delta time to 60fps (1.0 = 16.67ms)
+      // Cap at 3.0 to prevent physics teleportation when switching tabs
+      const dt = Math.min(3.0, rawDt / 16.67);
 
       const totalLength = path.getTotalLength() || 100;
       let localPainIndex = 0;
@@ -167,9 +178,9 @@ export default function VehicleEdge({
         car.targetNode = car.direction === 1 ? targetNodeId : sourceNodeId;
         
         if (!stopped) {
-          car.distance += car.speed;
+          car.distance += car.speed * dt;
         } else {
-          car.totalWaitTime += 16;
+          car.totalWaitTime += rawDt;
         }
 
         const weight = car.type === 'Ambulance' ? 50 : 1;

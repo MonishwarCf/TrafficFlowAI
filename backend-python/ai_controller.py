@@ -115,11 +115,23 @@ class AIController:
             q_values = {dur: self.q_table.get((state, dur), 0.0) for dur in self.durations}
             duration = max(q_values, key=q_values.get)
 
-        # Hard floor: duration must cover the FULL queue, not half.
-        # car_count // 2 was mathematically guaranteeing queues never drain.
-        # Now: 12 cars -> floor 12s, 20 cars -> floor 20s (capped at 30).
+        # Dynamic floor based on cross-traffic density to balance clearing vs starvation:
         active_car_count = all_telemetry.get(chosen_dir, {}).get('car_count', 0)
-        min_floor = min(30, max(5, active_car_count))
+        base_floor = min(30, max(5, active_car_count))
+        
+        if cross_state == 'E':
+            # Emergency waiting cross-side, yield immediately
+            min_floor = 5
+        elif cross_state == 'H':
+            # Heavy cross traffic, clear at least half of the active queue (car_count // 2)
+            min_floor = max(5, int(base_floor * 0.5))
+        elif cross_state == 'M':
+            # Medium cross traffic, clear at least 75% of the active queue (car_count * 0.75)
+            min_floor = max(5, int(base_floor * 0.75))
+        else:
+            # Low cross traffic, fully clear the active queue (100%)
+            min_floor = base_floor
+
         duration = max(duration, min_floor)
 
         self.last_state = state
