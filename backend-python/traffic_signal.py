@@ -158,7 +158,7 @@ class TrafficSignal:
                 'incoming': self.incoming,
                 'active_phases': list(self.active_phases),
                 'mode': self.operating_mode,
-                'cv_telemetry': self.cv_telemetry
+                'cv_telemetry': self.cv_telemetry.copy()
             }
 
     def pop_logs(self):
