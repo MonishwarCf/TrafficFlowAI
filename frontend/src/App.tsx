@@ -1,11 +1,11 @@
 
 import { Link } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { useTrafficWebSocket } from './hooks/useTrafficWebSocket';
+import { useTrafficContext } from './TrafficContext';
 import './App.css';
 
 function App() {
-  const { nodes, history, connected } = useTrafficWebSocket();
+  const { realtimeNodes: nodes, history, connected, metricsHistory, cityPainIndex, totalCarsFinished } = useTrafficContext();
 
   const getStatusColor = (status: string | undefined, light: string | Record<string, string> | undefined) => {
     let dominantLight = light;
@@ -37,6 +37,7 @@ function App() {
         <h1>TrafficFlow AI Dashboard</h1>
         <div>
             <Link to="/sandbox" style={{ marginRight: 20, color: '#fff', textDecoration: 'underline' }}>Go to Sandbox</Link>
+            <Link to="/logs" style={{ marginRight: 20, color: '#03a9f4', textDecoration: 'underline' }}>Debug & Logs</Link>
             <span className={`status-badge ${connected ? 'connected' : 'disconnected'}`}>
               {connected ? 'Connected' : 'Disconnected'}
             </span>
@@ -65,18 +66,42 @@ function App() {
         ))}
       </div>
       
-      <div className="chart-container" style={{ marginTop: '40px', padding: '20px', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
-        <h2 style={{ textAlign: 'center', marginBottom: '20px' }}>Real-Time Traffic Density (Last 20 Readings)</h2>
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="time" />
-            <YAxis domain={[0, 100]} />
-            <Tooltip />
-            <Legend />
-            <Line type="monotone" dataKey="density" stroke="#8884d8" activeDot={{ r: 8 }} name="Density (%)" />
-          </LineChart>
-        </ResponsiveContainer>
+      <div className="chart-container" style={{ marginTop: '40px', padding: '20px', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', display: 'flex', gap: '20px' }}>
+        
+        <div style={{ flex: 1 }}>
+          <h2 style={{ textAlign: 'center', marginBottom: '20px' }}>Real-Time Traffic Density</h2>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="time" />
+              <YAxis domain={[0, 100]} />
+              <Tooltip />
+              <Legend />
+              <Line type="monotone" dataKey="density" stroke="#8884d8" activeDot={{ r: 8 }} name="Density (%)" />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div style={{ flex: 1, borderLeft: '1px solid #eee', paddingLeft: '20px' }}>
+          <h2 style={{ textAlign: 'center', marginBottom: '5px' }}>Live Performance Metrics</h2>
+          <div style={{ textAlign: 'center', marginBottom: '15px' }}>
+            <span style={{ fontSize: '14px', color: '#666' }}>City Pain Index: <strong style={{ color: '#ff9800' }}>{Math.round(cityPainIndex)}</strong></span>
+            <span style={{ fontSize: '14px', color: '#666', marginLeft: '15px' }}>Throughput: <strong style={{ color: '#4caf50' }}>{totalCarsFinished}</strong></span>
+          </div>
+          <ResponsiveContainer width="100%" height={260}>
+            <LineChart data={metricsHistory}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+              <XAxis dataKey="time" stroke="#666" tick={{fontSize: 10}} />
+              <YAxis yAxisId="left" stroke="#ff9800" width={40} />
+              <YAxis yAxisId="right" orientation="right" stroke="#4caf50" width={40} />
+              <Tooltip />
+              <Legend />
+              <Line yAxisId="left" type="monotone" dataKey="pain" stroke="#ff9800" name="Pain Index" dot={false} strokeWidth={2} isAnimationActive={false} />
+              <Line yAxisId="right" type="monotone" dataKey="throughput" stroke="#4caf50" name="Throughput" dot={false} strokeWidth={2} isAnimationActive={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
       </div>
     </div>
   );

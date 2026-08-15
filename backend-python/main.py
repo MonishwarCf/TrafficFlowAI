@@ -48,7 +48,8 @@ def node_simulator(node_id):
                 'density': state['density'],
                 'light': state['light'],
                 'timestamp': time.time(),
-                'logs': logs
+                'logs': logs,
+                'cv_telemetry': state.get('cv_telemetry', {})
             }
             
             publish_queue.put(('traffic.' + node_id, message))
