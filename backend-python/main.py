@@ -14,6 +14,12 @@ import queue
 load_dotenv()
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 RABBITMQ_HOST = os.getenv('RABBITMQ_HOST', 'localhost')
 EXCHANGE_NAME = os.getenv('EXCHANGE_NAME', 'traffic_exchange')
@@ -187,12 +193,6 @@ def topology_listener():
 
 @app.on_event("startup")
 def startup_event():
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
     threading.Thread(target=publisher_thread, daemon=True).start()
     threading.Thread(target=topology_listener, daemon=True).start()
 
