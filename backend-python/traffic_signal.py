@@ -10,7 +10,7 @@ class TrafficSignal:
         self.active_phases = [] # Ordered list of connected directions to loop through
         self.current_phase_index = 0
         self.phase_timer = 0
-        self.phase_duration = 3 # 3 seconds per phase
+        self.phase_duration = 15 # 15 seconds per phase
         
         self.light_state = {'N': 'Red', 'S': 'Red', 'E': 'Red', 'W': 'Red'}
         self.active = True
@@ -156,7 +156,7 @@ class TrafficSignal:
             remaining = 0
             if self.active_phases:
                 if self.operating_mode == 'STATIC':
-                    remaining = 15 - self.phase_timer
+                    remaining = self.phase_duration - self.phase_timer
                 elif self.operating_mode == 'AI':
                     remaining = self.ai_phase_duration - self.ai_phase_timer
             
@@ -170,8 +170,8 @@ class TrafficSignal:
                 'mode': self.operating_mode,
                 'cv_telemetry': self.cv_telemetry.copy(),
                 'remaining_time': remaining,
-                'ai_action': self.ai.last_action,
-                'ai_reward': self.ai.last_loss
+                'ai_action': self.ai.last_action if self.operating_mode == 'AI' else None,
+                'ai_reward': self.ai.last_loss if self.operating_mode == 'AI' else None
             }
 
     def pop_logs(self):
