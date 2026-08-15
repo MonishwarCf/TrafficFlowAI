@@ -25,7 +25,9 @@ export default function VehicleEdge({
   targetPosition,
   style: _style = {},
   markerEnd,
-  data
+  data,
+  sourceHandleId,
+  targetHandleId
 }: EdgeProps) {
   const [edgePath] = getSmoothStepPath({
     sourceX,
@@ -52,8 +54,8 @@ export default function VehicleEdge({
   const reportWaitingCars = data?.reportWaitingCars;
   const targetNodeType = data?.targetNodeType;
   const sourceNodeType = data?.sourceNodeType;
-  const targetHandleDir = data?.targetHandle ? data.targetHandle.split('_')[0] : 'N';
-  const sourceHandleDir = data?.sourceHandle ? data.sourceHandle.split('_')[0] : 'S';
+  const targetHandleDir = targetHandleId ? targetHandleId.split('_')[0] : 'N';
+  const sourceHandleDir = sourceHandleId ? sourceHandleId.split('_')[0] : 'S';
 
   useEffect(() => {
     if (spawnTrigger > lastSpawnTrigger.current) {
