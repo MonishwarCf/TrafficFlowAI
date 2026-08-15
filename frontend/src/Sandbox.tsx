@@ -13,6 +13,7 @@ import VehicleEdge from './VehicleEdge';
 import ExitNode from './ExitNode';
 import StartNode from './StartNode';
 import { useTrafficContext, TransferBus } from './TrafficContext';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 export default function Sandbox() {
   const { sendTopologyUpdate, nodes: realtimeNodes, connected } = useTrafficWebSocket();
@@ -28,6 +29,7 @@ export default function Sandbox() {
   const [globalMode, setGlobalMode] = useState<'STATIC' | 'AI'>('STATIC');
   const [cityPainIndex, setCityPainIndex] = useState<number>(0);
   const [spawnAmbulance, setSpawnAmbulance] = useState<boolean>(false);
+  const [metricsHistory, setMetricsHistory] = useState<any[]>([]);
 
   const nodeTypes = useMemo(() => ({ junction: CustomJunctionNode, exit: ExitNode, start: StartNode }), []);
   const edgeTypes = useMemo(() => ({ vehicle: VehicleEdge }), []);
@@ -193,6 +195,26 @@ export default function Sandbox() {
     }
   }, []);
 
+  const cityPainRef = useRef(0);
+  const throughputRef = useRef(0);
+  cityPainRef.current = cityPainIndex;
+  throughputRef.current = totalCarsFinished;
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMetricsHistory(prev => {
+        const newHist = [...prev, {
+          time: new Date().toLocaleTimeString(),
+          pain: Math.round(cityPainRef.current),
+          throughput: throughputRef.current
+        }];
+        if (newHist.length > 30) return newHist.slice(newHist.length - 30);
+        return newHist;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   const onEdgeClick = (_event: React.MouseEvent, edge: Edge) => {
     if (isSpawnMode) {
       setSelectedEdgeId(edge.id);
@@ -322,6 +344,21 @@ export default function Sandbox() {
                Mode: {globalMode === 'STATIC' ? 'Static Timers' : 'Smart AI'}
              </button>
            </Panel>
+           <Panel position="bottom-left" style={{ width: '450px', height: '250px', backgroundColor: 'rgba(0,0,0,0.8)', padding: '10px', borderRadius: '8px', zIndex: 10 }}>
+            <h4 style={{ margin: '0 0 10px 0', color: 'white', textAlign: 'center' }}>Live Performance Metrics</h4>
+            <ResponsiveContainer width="100%" height="85%">
+              <LineChart data={metricsHistory}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#444" />
+                <XAxis dataKey="time" stroke="#aaa" tick={{fontSize: 10}} />
+                <YAxis yAxisId="left" stroke="#ffeb3b" width={40} />
+                <YAxis yAxisId="right" orientation="right" stroke="#4caf50" width={40} />
+                <Tooltip contentStyle={{ backgroundColor: '#222', border: 'none', color: '#fff' }} />
+                <Legend />
+                <Line yAxisId="left" type="monotone" dataKey="pain" stroke="#ffeb3b" name="Pain Index" dot={false} strokeWidth={2} isAnimationActive={false} />
+                <Line yAxisId="right" type="monotone" dataKey="throughput" stroke="#4caf50" name="Throughput" dot={false} strokeWidth={2} isAnimationActive={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </Panel>
            <Background color="#333" gap={16} />
            <Controls />
          </ReactFlow>
