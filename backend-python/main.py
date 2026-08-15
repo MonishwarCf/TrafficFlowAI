@@ -76,7 +76,10 @@ def publisher_thread():
                     routing_key=routing_key,
                     body=json.dumps(msg)
                 )
-                # print(f"Sent: {msg}")
+                # Dump JSON stats to file for agent reworks
+                with open('traffic_stats.jsonl', 'a') as f:
+                    f.write(json.dumps(msg) + '\n')
+                    
         except Exception as e:
             print(f"Publisher error: {e}. Retrying...")
             if connection and not connection.is_closed:
