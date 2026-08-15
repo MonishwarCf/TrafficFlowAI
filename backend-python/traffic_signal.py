@@ -1,5 +1,6 @@
 import threading
 import time
+from ai_controller import AIController
 
 class TrafficSignal:
     def __init__(self, node_id):
@@ -22,6 +23,11 @@ class TrafficSignal:
         self.override_time = 0
         
         self.operating_mode = 'STATIC' # 'STATIC' or 'AI'
+        
+        self.ai = AIController()
+        self.ai_phase_timer = 0
+        self.ai_phase_duration = 0
+        
         # Future-proofing: store rich telemetry from simulated cameras/CV models
         self.cv_telemetry = {
             'N': {'car_count': 0, 'density': 0.0, 'ambulance': False},
@@ -65,8 +71,25 @@ class TrafficSignal:
                     self.phase_timer = 0
                     self.current_phase_index = (self.current_phase_index + 1) % len(self.active_phases)
             elif self.operating_mode == 'AI':
-                # AI Controller will take over current_phase_index externally
-                pass
+                if self.ai_phase_duration == 0 and self.active_phases:
+                    active_dir = self.active_phases[self.current_phase_index]
+                    self.ai_phase_duration = self.ai.get_optimal_duration(active_dir, self.cv_telemetry)
+
+                self.ai_phase_timer += 1
+                
+                # Midway check (O(1) interrupt)
+                if self.ai_phase_timer == self.ai_phase_duration // 2 and self.active_phases:
+                    active_dir = self.active_phases[self.current_phase_index]
+                    new_duration = self.ai.get_optimal_duration(active_dir, self.cv_telemetry)
+                    if new_duration <= self.ai_phase_timer:
+                        self.ai_phase_timer = self.ai_phase_duration # Force switch immediately
+                        
+                if self.ai_phase_timer >= self.ai_phase_duration:
+                    self.ai_phase_timer = 0
+                    self.current_phase_index = (self.current_phase_index + 1) % len(self.active_phases)
+                    if self.active_phases:
+                        active_dir = self.active_phases[self.current_phase_index]
+                        self.ai_phase_duration = self.ai.get_optimal_duration(active_dir, self.cv_telemetry)
 
     def action_doer(self):
         with self.lock:
