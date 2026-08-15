@@ -43,9 +43,10 @@ def node_simulator(node_id):
                     break
                 signal = nodes[node_id]
                 
-            # Process cycle (runs every 1 second simulated)
-            signal.process()
-            signal.action_doer()
+            # Process cycle (runs every 1 second simulated) only when sim is running
+            if sim_running:
+                signal.process()
+                signal.action_doer()
             
             state = signal.get_state()
             logs = signal.pop_logs()
@@ -64,9 +65,8 @@ def node_simulator(node_id):
                 'ai_reward': state.get('ai_reward')
             }
             
-            # Only broadcast/dump stats when sim is running
-            if sim_running:
-                publish_queue.put(('traffic.' + node_id, message))
+            # Always publish state to queue to keep UI in sync
+            publish_queue.put(('traffic.' + node_id, message))
         except Exception as e:
             print(f"Error in node_simulator {node_id}: {e}")
         time.sleep(1) # Faster simulation cycle so 10s phases feel responsive
@@ -86,9 +86,10 @@ def publisher_thread():
                     routing_key=routing_key,
                     body=json.dumps(msg)
                 )
-                # Dump JSON stats to file for agent reworks
-                with open('traffic_stats.jsonl', 'a') as f:
-                    f.write(json.dumps(msg) + '\n')
+                # Dump JSON stats to file for agent reworks ONLY when sim is running
+                if sim_running:
+                    with open('traffic_stats.jsonl', 'a') as f:
+                        f.write(json.dumps(msg) + '\n')
                     
         except Exception as e:
             print(f"Publisher error: {e}. Retrying...")
