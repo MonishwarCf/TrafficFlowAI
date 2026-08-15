@@ -226,9 +226,10 @@ export default function Sandbox() {
   useEffect(() => {
     const interval = setInterval(() => {
       setMetricsHistory(prev => {
+        const totalPain = Math.round(cityPainRef.current);
         const newHist = [...prev, {
           time: new Date().toLocaleTimeString(),
-          pain: Math.round(cityPainRef.current),
+          pain: totalPain,
           throughput: throughputRef.current
         }];
         if (newHist.length > 30) return newHist.slice(newHist.length - 30);

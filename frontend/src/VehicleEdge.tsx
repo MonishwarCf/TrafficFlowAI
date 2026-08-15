@@ -4,6 +4,8 @@ import { TransferBus } from './TrafficContext';
 
 export interface Vehicle {
   id: number;
+  isMoving: boolean;       // true if driving, false if stopped at red light
+  targetNode?: string;      // intersection node ID the car is heading toward
   distance: number;
   color: string;
   speed: number;
@@ -12,6 +14,25 @@ export interface Vehicle {
   startTime: number;
   totalWaitTime: number;
   type?: string;
+}
+
+/**
+ * Modular Telemetry Interface.
+ * Modular design allows swapping out this internal physics calculator 
+ * for an external Computer Vision (CV) Model API in the future.
+ */
+export function getLaneTelemetry(vehicles: Vehicle[], dir: 1 | -1, totalLength: number, maxCapacity: number = 15) {
+  const laneStopped = vehicles.filter(v => {
+    if (v.direction !== dir) return false;
+    const distToEnd = totalLength - v.distance;
+    return !v.isMoving && distToEnd >= 0 && distToEnd < 200;
+  });
+
+  const count = laneStopped.length;
+  const density = Math.min(1.0, count / maxCapacity);
+  const hasAmbulance = laneStopped.some(v => v.type === 'Ambulance');
+
+  return { count, density, hasAmbulance };
 }
 
 export default function VehicleEdge({
@@ -68,6 +89,8 @@ export default function VehicleEdge({
         
         newCars.push({
           id: nextId.current++,
+          isMoving: true,
+          targetNode: direction === 1 ? targetNodeId : sourceNodeId,
           distance: -20 - Math.floor(i/2) * 35,
           color: isAmb ? '#ff0000' : `hsl(${Math.random() * 360}, 100%, 60%)`,
           speed: isAmb ? 2 : (1 + Math.random() * 1),
@@ -80,13 +103,15 @@ export default function VehicleEdge({
       }
       vehiclesRef.current = [...vehiclesRef.current, ...newCars];
     }
-  }, [spawnTrigger, spawnCount, spawnType]);
+  }, [spawnTrigger, spawnCount, spawnType, targetNodeId, sourceNodeId]);
 
   useEffect(() => {
     const onSpawn = (e: any) => {
       const { color, speed, direction, startTime, totalWaitTime, type } = e.detail;
       vehiclesRef.current.push({
         id: nextId.current++,
+        isMoving: true,
+        targetNode: direction === 1 ? targetNodeId : sourceNodeId,
         distance: -10,
         color,
         speed,
@@ -99,7 +124,7 @@ export default function VehicleEdge({
     };
     TransferBus.addEventListener(`spawn-${id}`, onSpawn);
     return () => TransferBus.removeEventListener(`spawn-${id}`, onSpawn);
-  }, [id]);
+  }, [id, targetNodeId, sourceNodeId]);
 
   useEffect(() => {
     let frameId: number;
@@ -113,10 +138,6 @@ export default function VehicleEdge({
       }
 
       const totalLength = path.getTotalLength() || 100;
-      let waitingTarget = 0;
-      let waitingSource = 0;
-      let ambTarget = false;
-      let ambSource = false;
       let localPainIndex = 0;
 
       for (let i = 0; i < vehiclesRef.current.length; i++) {
@@ -147,6 +168,8 @@ export default function VehicleEdge({
         }
 
         car.stopped = stopped;
+        car.isMoving = !stopped;
+        car.targetNode = car.direction === 1 ? targetNodeId : sourceNodeId;
         
         if (!stopped) {
           car.distance += car.speed;
@@ -156,16 +179,6 @@ export default function VehicleEdge({
 
         const weight = car.type === 'Ambulance' ? 50 : 1;
         localPainIndex += (car.totalWaitTime / 1000) * weight;
-
-        if (stopped && distToEnd >= 0 && distToEnd < 200 && !isHeadingToExit) {
-          if (car.direction === 1) {
-             waitingTarget++;
-             if (car.type === 'Ambulance') ambTarget = true;
-          } else {
-             waitingSource++;
-             if (car.type === 'Ambulance') ambSource = true;
-          }
-        }
       }
 
       vehiclesRef.current = vehiclesRef.current.filter(c => {
@@ -197,12 +210,12 @@ export default function VehicleEdge({
 
         if (reportWaitingCars) {
           if (targetNodeId) {
-             const densityTarget = Math.min(1.0, waitingTarget / 15.0);
-             reportWaitingCars(id, targetNodeId, targetHandleDir, waitingTarget, densityTarget, ambTarget);
+             const targetTelemetry = getLaneTelemetry(vehiclesRef.current, 1, totalLength);
+             reportWaitingCars(id, targetNodeId, targetHandleDir, targetTelemetry.count, targetTelemetry.density, targetTelemetry.hasAmbulance);
           }
           if (sourceNodeId) {
-             const densitySource = Math.min(1.0, waitingSource / 15.0);
-             reportWaitingCars(id, sourceNodeId, sourceHandleDir, waitingSource, densitySource, ambSource);
+             const sourceTelemetry = getLaneTelemetry(vehiclesRef.current, -1, totalLength);
+             reportWaitingCars(id, sourceNodeId, sourceHandleDir, sourceTelemetry.count, sourceTelemetry.density, sourceTelemetry.hasAmbulance);
           }
         }
         lastReportTime = time;
