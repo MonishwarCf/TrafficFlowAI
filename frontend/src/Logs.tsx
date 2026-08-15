@@ -65,17 +65,33 @@ export default function Logs() {
                 <pre style={{ margin: 0, color: '#aaa' }}>{JSON.stringify(selectedNodeData.light, null, 2)}</pre>
               </p>
               
-              <h4 style={{ margin: '20px 0 10px 0', borderBottom: '1px solid #444', paddingBottom: '5px' }}>Lane CV Telemetry (Live)</h4>
+              <h4 style={{ margin: '20px 0 10px 0', borderBottom: '1px solid #444', paddingBottom: '5px' }}>Live Status</h4>
+              <p style={{ margin: '0 0 10px 0' }}><strong>Proactive Incoming:</strong> {selectedNodeData.incoming || 0} messages pending</p>
               {selectedNodeData.cv_telemetry ? (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  {Object.entries(selectedNodeData.cv_telemetry).map(([dir, data]: [string, any]) => (
-                    <div key={dir} style={{ backgroundColor: '#2a2a2a', padding: '10px', borderRadius: '4px' }}>
-                      <div style={{ fontWeight: 'bold', color: '#03a9f4', marginBottom: '5px' }}>Lane {dir}</div>
-                      <div style={{ fontSize: '13px' }}>Cars: <span style={{ color: '#fff' }}>{data.car_count}</span></div>
-                      <div style={{ fontSize: '13px' }}>Density: <span style={{ color: '#fff' }}>{(data.density * 100).toFixed(0)}%</span></div>
-                      {data.ambulance && <div style={{ fontSize: '12px', color: '#f44336', marginTop: '5px', fontWeight: 'bold' }}>AMBULANCE DETECTED</div>}
-                    </div>
-                  ))}
+                  {Object.entries(selectedNodeData.cv_telemetry).map(([dir, data]: [string, any]) => {
+                    const lightColor = typeof selectedNodeData.light === 'object' ? (selectedNodeData.light as Record<string, string>)[dir] || 'Red' : 'Red';
+                    const isGreen = lightColor === 'Green';
+                    return (
+                      <div key={dir} style={{ backgroundColor: '#2a2a2a', padding: '10px', borderRadius: '4px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <div style={{ fontWeight: 'bold', color: '#03a9f4' }}>Lane {dir}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: isGreen ? '#4caf50' : '#f44336', boxShadow: `0 0 5px ${isGreen ? '#4caf50' : '#f44336'}` }} />
+                            <span style={{ fontSize: '12px', color: isGreen ? '#4caf50' : '#f44336' }}>{lightColor}</span>
+                          </div>
+                        </div>
+                        {isGreen && selectedNodeData.remaining_time !== undefined && (
+                          <div style={{ fontSize: '12px', color: '#ffd54f', marginBottom: '4px' }}>
+                            Switching in: {selectedNodeData.remaining_time}s
+                          </div>
+                        )}
+                        <div style={{ fontSize: '13px' }}>Cars: <span style={{ color: '#fff' }}>{data.car_count}</span></div>
+                        <div style={{ fontSize: '13px' }}>Density: <span style={{ color: '#fff' }}>{(data.density * 100).toFixed(0)}%</span></div>
+                        {data.ambulance && <div style={{ fontSize: '12px', color: '#f44336', marginTop: '5px', fontWeight: 'bold' }}>AMBULANCE DETECTED</div>}
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <p style={{ color: '#666' }}>No CV telemetry available yet.</p>

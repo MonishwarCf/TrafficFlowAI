@@ -10,6 +10,8 @@ export interface TrafficData {
   timestamp: number;
   logs?: string[];
   cv_telemetry?: Record<string, any>;
+  remaining_time?: number;
+  incoming?: number;
 }
 
 export const useTrafficWebSocket = () => {

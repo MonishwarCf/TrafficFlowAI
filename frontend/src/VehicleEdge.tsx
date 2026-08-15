@@ -21,16 +21,12 @@ export interface Vehicle {
  * Modular design allows swapping out this internal physics calculator 
  * for an external Computer Vision (CV) Model API in the future.
  */
-export function getLaneTelemetry(vehicles: Vehicle[], dir: 1 | -1, totalLength: number, maxCapacity: number = 15) {
-  const laneStopped = vehicles.filter(v => {
-    if (v.direction !== dir) return false;
-    const distToEnd = totalLength - v.distance;
-    return !v.isMoving && distToEnd >= 0 && distToEnd < 200;
-  });
+export function getLaneTelemetry(vehicles: Vehicle[], dir: 1 | -1, maxCapacity: number = 15) {
+  const laneVehicles = vehicles.filter(v => v.direction === dir);
 
-  const count = laneStopped.length;
+  const count = laneVehicles.length;
   const density = Math.min(1.0, count / maxCapacity);
-  const hasAmbulance = laneStopped.some(v => v.type === 'Ambulance');
+  const hasAmbulance = laneVehicles.some(v => v.type === 'Ambulance');
 
   return { count, density, hasAmbulance };
 }
@@ -208,13 +204,13 @@ export default function VehicleEdge({
         }));
 
           if (targetNodeId) {
-             const targetTelemetry = getLaneTelemetry(vehiclesRef.current, 1, totalLength);
+             const targetTelemetry = getLaneTelemetry(vehiclesRef.current, 1);
              TransferBus.dispatchEvent(new CustomEvent('vision_sensor', {
                detail: { targetNodeId, direction: targetHandleDir, count: targetTelemetry.count, density: targetTelemetry.density, hasAmbulance: targetTelemetry.hasAmbulance }
              }));
           }
           if (sourceNodeId) {
-             const sourceTelemetry = getLaneTelemetry(vehiclesRef.current, -1, totalLength);
+             const sourceTelemetry = getLaneTelemetry(vehiclesRef.current, -1);
              TransferBus.dispatchEvent(new CustomEvent('vision_sensor', {
                detail: { targetNodeId: sourceNodeId, direction: sourceHandleDir, count: sourceTelemetry.count, density: sourceTelemetry.density, hasAmbulance: sourceTelemetry.hasAmbulance }
              }));
