@@ -72,10 +72,13 @@ export function TrafficProvider({ children }: { children: ReactNode }) {
         const direction = targetEdge.source === nodeId ? 1 : -1;
         const nextNodeId = targetEdge.source === nodeId ? targetEdge.target : targetEdge.source;
         
+        // Derive the direction the cars will arrive FROM (the target handle of the edge)
+        const targetHandleDir = (targetEdge.data?.targetHandle || 'N') as string;
         sendTopologyUpdate({
             type: 'proactive_message',
             source: nodeId,
             target: nextNodeId,
+            targetDir: targetHandleDir,
             count: 1
         });
         

@@ -169,9 +169,10 @@ def process_topology_message(ch, method, properties, body):
                     nodes[n_id].update_density(count)
             elif msg_type == "proactive_message":
                 tgt = msg.get("target")
+                direction = msg.get("targetDir", "N")  # which direction cars will arrive from
                 if tgt in nodes:
-                    nodes[tgt].add_incoming(msg.get("count", 0))
-                    print(f"Node {tgt} received proactive alert: {msg.get('count')} cars incoming from {msg.get('source')}!")
+                    nodes[tgt].add_incoming(direction, msg.get("count", 0))
+                    print(f"Node {tgt} [{direction}] received proactive alert: {msg.get('count')} cars incoming from {msg.get('source')}!")
     except Exception as e:
         print(f"Error processing topology msg: {e}")
 

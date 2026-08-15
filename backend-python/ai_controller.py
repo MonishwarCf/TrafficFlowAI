@@ -65,18 +65,28 @@ class AIController:
             return density * 50 + car_count
         return density * 10 + car_count
 
-    def select_next_phase(self, active_phases, all_telemetry, incoming_count=0):
+    def select_next_phase(self, active_phases, all_telemetry, incoming_by_dir=None, incoming_count=0):
         """
         PHASE SELECTION: AI selects which direction should go green next
         based on urgency, AND chooses the optimal duration via Q-table.
+        incoming_by_dir: dict {'N': count, 'S': count, ...} per-direction platoon alerts.
         Returns (chosen_direction, optimal_duration).
         """
         if not active_phases or not all_telemetry:
             return (active_phases[0] if active_phases else None), 10
 
-        # Score each candidate direction by urgency
-        scored = [(self._score_direction(d, all_telemetry) + (incoming_count * 10 if incoming_count > 5 else 0), d)
-                  for d in active_phases]
+        if incoming_by_dir is None:
+            incoming_by_dir = {}
+
+        scored = []
+        for d in active_phases:
+            base_score = self._score_direction(d, all_telemetry)
+            # Incoming bonus is capped at 50% of a full-lane score (100) so it
+            # can never beat a direction that already has real heavy traffic.
+            dir_incoming = incoming_by_dir.get(d, 0)
+            incoming_bonus = min(dir_incoming * 3, 50) if dir_incoming > 3 else 0
+            scored.append((base_score + incoming_bonus, d))
+
         scored.sort(reverse=True)
 
         # Epsilon-greedy phase selection
@@ -103,6 +113,12 @@ class AIController:
             q_values = {dur: self.q_table.get((state, dur), 0.0) for dur in self.durations}
             duration = max(q_values, key=q_values.get)
 
+        # Hard floor: duration must be at least enough to clear half the active lane's queue.
+        # This prevents the AI from picking 5s for a lane with 20 cars waiting.
+        active_car_count = all_telemetry.get(chosen_dir, {}).get('car_count', 0)
+        min_floor = min(30, max(5, active_car_count // 2))
+        duration = max(duration, min_floor)
+
         self.last_state = state
         self.last_action = duration
         self.last_q_value = self.q_table.get((state, duration), 0.0)
@@ -122,6 +138,5 @@ class AIController:
 
     def get_optimal_duration(self, active_direction, all_telemetry, incoming_count=0):
         """Backward compat shim for STATIC mode."""
-        _, duration = self.select_next_phase([active_direction], all_telemetry, incoming_count)
+        _, duration = self.select_next_phase([active_direction], all_telemetry, incoming_count=incoming_count)
         return duration
-

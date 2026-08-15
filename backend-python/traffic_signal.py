@@ -18,7 +18,7 @@ class TrafficSignal:
         
         # Additional state
         self.density = 0
-        self.incoming = 0
+        self.incoming = {'N': 0, 'S': 0, 'E': 0, 'W': 0}  # per-direction platoon alerts
         self.override = None
         self.override_time = 0
         self.logs = []
@@ -74,7 +74,7 @@ class TrafficSignal:
                     self.logs.append(f"Static: Switched to {self.active_phases[self.current_phase_index]} for {self.phase_duration}s")
             elif self.operating_mode == 'AI':
                 if self.ai_phase_duration == 0 and self.active_phases:
-                    chosen_dir, duration = self.ai.select_next_phase(self.active_phases, self.cv_telemetry, self.incoming)
+                    chosen_dir, duration = self.ai.select_next_phase(self.active_phases, self.cv_telemetry, incoming_by_dir=self.incoming)
                     if chosen_dir:
                         self.current_phase_index = self.active_phases.index(chosen_dir)
                     self.ai_phase_duration = duration
@@ -88,9 +88,9 @@ class TrafficSignal:
                     self.ai.update_q_value(reward)
 
                     self.ai_phase_timer = 0
-                    self.incoming = 0
+                    self.incoming = {'N': 0, 'S': 0, 'E': 0, 'W': 0}  # reset all incoming after phase
                     if self.active_phases:
-                        chosen_dir, duration = self.ai.select_next_phase(self.active_phases, self.cv_telemetry, self.incoming)
+                        chosen_dir, duration = self.ai.select_next_phase(self.active_phases, self.cv_telemetry, incoming_by_dir=self.incoming)
                         if chosen_dir:
                             self.current_phase_index = self.active_phases.index(chosen_dir)
                         self.ai_phase_duration = duration
@@ -119,9 +119,11 @@ class TrafficSignal:
         with self.lock:
             self.density = density
 
-    def add_incoming(self, count):
+    def add_incoming(self, direction, count):
+        """Records incoming platoon alert for a specific arrival direction."""
         with self.lock:
-            self.incoming += count
+            if direction in self.incoming:
+                self.incoming[direction] += count
 
     def set_override(self, state, duration):
         with self.lock:
@@ -162,7 +164,8 @@ class TrafficSignal:
                 'node_id': self.node_id,
                 'light': self.light_state.copy(),
                 'density': self.density,
-                'incoming': self.incoming,
+                'incoming': sum(self.incoming.values()),  # total for display
+                'incoming_by_dir': self.incoming.copy(),
                 'active_phases': list(self.active_phases),
                 'mode': self.operating_mode,
                 'cv_telemetry': self.cv_telemetry.copy(),
