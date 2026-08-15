@@ -44,7 +44,7 @@ class AIController:
             return 'M'
         return 'L'
 
-    def get_optimal_duration(self, active_direction, all_telemetry):
+    def get_optimal_duration(self, active_direction, all_telemetry, incoming_count=0):
         """
         O(1) Lookup for the optimal phase duration.
         """
@@ -53,6 +53,11 @@ class AIController:
 
         # 1. State of the active green phase
         active_state = self._discretize(all_telemetry.get(active_direction, {}))
+        
+        # Proactive Gossip: If a massive platoon is coming, treat our active state as 'H' (High)
+        # to ensure we keep the light green for them before they even arrive on camera!
+        if incoming_count > 5 and active_state in ['L', 'M']:
+            active_state = 'H'
         
         # 2. State of cross traffic (max density of all red lights)
         cross_states = []

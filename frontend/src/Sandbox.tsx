@@ -16,7 +16,7 @@ import { useTrafficContext, TransferBus } from './TrafficContext';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 export default function Sandbox() {
-  const { sendTopologyUpdate, nodes: realtimeNodes, connected } = useTrafficWebSocket();
+  const { sendTopologyUpdate, nodes: realtimeNodes, connected, eventLogs } = useTrafficWebSocket();
   const { 
     nodes, setNodes, onNodesChange, 
     edges, setEdges, onEdgesChange, onConnect,
@@ -401,6 +401,17 @@ export default function Sandbox() {
               </LineChart>
             </ResponsiveContainer>
           </Panel>
+          <Panel position="bottom-right" style={{ width: '350px', height: '250px', backgroundColor: 'rgba(0,0,0,0.8)', padding: '10px', borderRadius: '8px', zIndex: 10, display: 'flex', flexDirection: 'column' }}>
+             <h4 style={{ margin: '0 0 10px 0', color: '#03a9f4', textAlign: 'center', borderBottom: '1px solid #333', paddingBottom: '5px' }}>System Logs</h4>
+             <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column-reverse', fontSize: '11px', fontFamily: 'monospace' }}>
+               {[...eventLogs].reverse().map((log, i) => (
+                 <div key={i} style={{ marginBottom: '4px', borderBottom: '1px solid #222', paddingBottom: '2px' }}>
+                   <span style={{ color: '#888' }}>[{log.time}]</span> <strong style={{ color: '#ffb300' }}>{log.node}</strong>: <span style={{ color: '#ccc' }}>{log.msg}</span>
+                 </div>
+               ))}
+               {eventLogs.length === 0 && <div style={{ color: '#666', textAlign: 'center', marginTop: '20px' }}>No logs yet...</div>}
+             </div>
+           </Panel>
            <Background color="#333" gap={16} />
            <Controls />
          </ReactFlow>

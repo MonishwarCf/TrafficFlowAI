@@ -40,13 +40,15 @@ def node_simulator(node_id):
             signal.action_doer()
             
             state = signal.get_state()
+            logs = signal.pop_logs()
             
             message = {
                 'type': 'LIGHT_UPDATE',
                 'node': node_id,
                 'density': state['density'],
                 'light': state['light'],
-                'timestamp': time.time()
+                'timestamp': time.time(),
+                'logs': logs
             }
             
             publish_queue.put(('traffic.' + node_id, message))

@@ -21,6 +21,7 @@ class TrafficSignal:
         self.incoming = 0
         self.override = None
         self.override_time = 0
+        self.logs = []
         
         self.operating_mode = 'STATIC' # 'STATIC' or 'AI'
         
@@ -70,26 +71,30 @@ class TrafficSignal:
                 if self.phase_timer >= self.phase_duration:
                     self.phase_timer = 0
                     self.current_phase_index = (self.current_phase_index + 1) % len(self.active_phases)
+                    self.logs.append(f"Static: Switched to {self.active_phases[self.current_phase_index]} for {self.phase_duration}s")
             elif self.operating_mode == 'AI':
                 if self.ai_phase_duration == 0 and self.active_phases:
                     active_dir = self.active_phases[self.current_phase_index]
-                    self.ai_phase_duration = self.ai.get_optimal_duration(active_dir, self.cv_telemetry)
+                    self.ai_phase_duration = self.ai.get_optimal_duration(active_dir, self.cv_telemetry, self.incoming)
 
                 self.ai_phase_timer += 1
                 
                 # Midway check (O(1) interrupt)
                 if self.ai_phase_timer == self.ai_phase_duration // 2 and self.active_phases:
                     active_dir = self.active_phases[self.current_phase_index]
-                    new_duration = self.ai.get_optimal_duration(active_dir, self.cv_telemetry)
+                    new_duration = self.ai.get_optimal_duration(active_dir, self.cv_telemetry, self.incoming)
                     if new_duration <= self.ai_phase_timer:
                         self.ai_phase_timer = self.ai_phase_duration # Force switch immediately
+                        self.logs.append(f"AI Interrupt: Early switch to next phase (Midway Check yielded {new_duration}s)")
                         
                 if self.ai_phase_timer >= self.ai_phase_duration:
                     self.ai_phase_timer = 0
+                    self.incoming = 0 # Reset incoming count when we switch phases
                     self.current_phase_index = (self.current_phase_index + 1) % len(self.active_phases)
                     if self.active_phases:
                         active_dir = self.active_phases[self.current_phase_index]
-                        self.ai_phase_duration = self.ai.get_optimal_duration(active_dir, self.cv_telemetry)
+                        self.ai_phase_duration = self.ai.get_optimal_duration(active_dir, self.cv_telemetry, self.incoming)
+                        self.logs.append(f"AI: Switched to {active_dir} for {self.ai_phase_duration}s")
 
     def action_doer(self):
         with self.lock:
@@ -155,3 +160,11 @@ class TrafficSignal:
                 'mode': self.operating_mode,
                 'cv_telemetry': self.cv_telemetry
             }
+
+    def pop_logs(self):
+        with self.lock:
+            if not self.logs:
+                return []
+            popped = list(self.logs)
+            self.logs.clear()
+            return popped

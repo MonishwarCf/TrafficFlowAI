@@ -8,11 +8,13 @@ export interface TrafficData {
   status?: string;
   light?: string | Record<string, string>;
   timestamp: number;
+  logs?: string[];
 }
 
 export const useTrafficWebSocket = () => {
   const [nodes, setNodes] = useState<Record<string, TrafficData>>({});
   const [history, setHistory] = useState<TrafficData[]>([]);
+  const [eventLogs, setEventLogs] = useState<{time: string, node: string, msg: string}[]>([]);
   const [connected, setConnected] = useState(false);
   const clientRef = useRef<Client | null>(null);
 
@@ -39,6 +41,16 @@ export const useTrafficWebSocket = () => {
                 }
                 return newHistory;
               });
+
+              if (data.logs && data.logs.length > 0) {
+                setEventLogs(prev => {
+                  const newLogs = [...prev];
+                  const timeStr = new Date().toLocaleTimeString();
+                  data.logs!.forEach(msg => newLogs.push({ time: timeStr, node: data.node, msg }));
+                  if (newLogs.length > 50) return newLogs.slice(newLogs.length - 50);
+                  return newLogs;
+                });
+              }
             } catch (e) {
               console.error("Failed to parse message body:", message.body, e);
             }
@@ -75,5 +87,11 @@ export const useTrafficWebSocket = () => {
     }
   }, []);
 
-  return { nodes, history, connected, sendTopologyUpdate };
+  return { 
+    nodes, 
+    history, 
+    connected, 
+    eventLogs, 
+    sendTopologyUpdate 
+  };
 };
