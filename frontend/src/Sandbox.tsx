@@ -201,13 +201,20 @@ export default function Sandbox() {
     TransferBus.addEventListener('transfer', handleTransfer);
     TransferBus.addEventListener('vehicle_completed', handleCompleted);
 
-    const painMap = new Map<string, number>();
+    const painMap = new Map<string, { pain: number, carCount: number }>();
     const handlePainReport = (e: any) => {
-      const { edgeId, pain } = e.detail;
-      painMap.set(edgeId, pain);
-      let total = 0;
-      painMap.forEach(v => total += v);
-      setCityPainIndex(total);
+      const { edgeId, pain, carCount } = e.detail;
+      painMap.set(edgeId, { pain, carCount });
+      
+      let totalPain = 0;
+      let totalCars = 0;
+      painMap.forEach(v => {
+        totalPain += v.pain;
+        totalCars += v.carCount;
+      });
+
+      const avgWaitSeconds = totalCars > 0 ? (totalPain / totalCars) : 0;
+      setCityPainIndex(Math.round(avgWaitSeconds * 10) / 10);
     };
     TransferBus.addEventListener('pain_report', handlePainReport);
 

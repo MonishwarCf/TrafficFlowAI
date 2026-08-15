@@ -205,7 +205,7 @@ export default function VehicleEdge({
 
       if (time - lastReportTime > 500) {
         TransferBus.dispatchEvent(new CustomEvent('pain_report', { 
-            detail: { edgeId: id, pain: localPainIndex } 
+            detail: { edgeId: id, pain: localPainIndex, carCount: vehiclesRef.current.length } 
         }));
 
         if (reportWaitingCars) {
