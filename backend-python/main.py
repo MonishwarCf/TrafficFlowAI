@@ -7,6 +7,7 @@ import os
 from dotenv import load_dotenv
 from traffic_signal import TrafficSignal
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import queue
 
@@ -24,6 +25,7 @@ edges = {} # node_id -> set of connected node_ids
 nodes_lock = threading.Lock()
 publish_queue = queue.Queue()
 global_operating_mode = 'STATIC'
+sim_running = False  # Simulation on/off flag
 
 def node_simulator(node_id):
     print(f"Started simulator for node {node_id}")
@@ -56,7 +58,9 @@ def node_simulator(node_id):
                 'ai_reward': state.get('ai_reward')
             }
             
-            publish_queue.put(('traffic.' + node_id, message))
+            # Only broadcast/dump stats when sim is running
+            if sim_running:
+                publish_queue.put(('traffic.' + node_id, message))
         except Exception as e:
             print(f"Error in node_simulator {node_id}: {e}")
         time.sleep(1) # Faster simulation cycle so 10s phases feel responsive
@@ -183,12 +187,42 @@ def topology_listener():
 
 @app.on_event("startup")
 def startup_event():
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     threading.Thread(target=publisher_thread, daemon=True).start()
     threading.Thread(target=topology_listener, daemon=True).start()
 
 @app.get("/")
 def read_root():
-    return {"message": "Dynamic Edge AI Traffic Simulator Running"}
+    return {"message": "Dynamic Edge AI Traffic Simulator Running", "sim_running": sim_running}
+
+@app.post("/sim/start")
+def start_sim():
+    global sim_running
+    sim_running = True
+    # Truncate stats file ONLY on start - preserves data between restarts
+    try:
+        with open('traffic_stats.jsonl', 'w') as f:
+            f.truncate(0)
+        print("[SIM] Started - traffic_stats.jsonl truncated.")
+    except Exception as e:
+        print(f"[SIM] Warning: could not truncate stats file: {e}")
+    return {"status": "started"}
+
+@app.post("/sim/stop")
+def stop_sim():
+    global sim_running
+    sim_running = False
+    print("[SIM] Stopped - stats preserved in traffic_stats.jsonl")
+    return {"status": "stopped"}
+
+@app.get("/sim/status")
+def sim_status():
+    return {"sim_running": sim_running}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001)

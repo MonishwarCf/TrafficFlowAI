@@ -74,24 +74,27 @@ class TrafficSignal:
                     self.logs.append(f"Static: Switched to {self.active_phases[self.current_phase_index]} for {self.phase_duration}s")
             elif self.operating_mode == 'AI':
                 if self.ai_phase_duration == 0 and self.active_phases:
-                    active_dir = self.active_phases[self.current_phase_index]
-                    self.ai_phase_duration = self.ai.get_optimal_duration(active_dir, self.cv_telemetry, self.incoming)
+                    chosen_dir, duration = self.ai.select_next_phase(self.active_phases, self.cv_telemetry, self.incoming)
+                    if chosen_dir:
+                        self.current_phase_index = self.active_phases.index(chosen_dir)
+                    self.ai_phase_duration = duration
 
                 self.ai_phase_timer += 1
 
                 if self.ai_phase_timer >= self.ai_phase_duration:
                     # Calculate reward for the just-completed phase
                     total_waiting = sum(data.get('car_count', 0) for data in self.cv_telemetry.values())
-                    reward = -total_waiting # We want to minimize cars waiting
+                    reward = -total_waiting
                     self.ai.update_q_value(reward)
 
                     self.ai_phase_timer = 0
-                    self.incoming = 0 # Reset incoming count when we switch phases
-                    self.current_phase_index = (self.current_phase_index + 1) % len(self.active_phases)
+                    self.incoming = 0
                     if self.active_phases:
-                        active_dir = self.active_phases[self.current_phase_index]
-                        self.ai_phase_duration = self.ai.get_optimal_duration(active_dir, self.cv_telemetry, self.incoming)
-                        self.logs.append(f"AI: Switched to {active_dir} for {self.ai_phase_duration}s")
+                        chosen_dir, duration = self.ai.select_next_phase(self.active_phases, self.cv_telemetry, self.incoming)
+                        if chosen_dir:
+                            self.current_phase_index = self.active_phases.index(chosen_dir)
+                        self.ai_phase_duration = duration
+                        self.logs.append(f"AI: Chose {self.active_phases[self.current_phase_index]} for {self.ai_phase_duration}s (reward={reward})")
 
     def action_doer(self):
         with self.lock:

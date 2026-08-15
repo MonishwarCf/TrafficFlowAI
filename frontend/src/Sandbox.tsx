@@ -27,6 +27,8 @@ export default function Sandbox() {
   const [spawnCount, setSpawnCount] = useState<number>(5);
   const [globalMode, setGlobalMode] = useState<'STATIC' | 'AI'>('STATIC');
   const [spawnAmbulance, setSpawnAmbulance] = useState<boolean>(false);
+  const [simRunning, setSimRunning] = useState<boolean>(false);
+  const [simLoading, setSimLoading] = useState<boolean>(false);
 
   const nodeTypes = useMemo(() => ({ junction: CustomJunctionNode, exit: ExitNode, start: StartNode }), []);
   const edgeTypes = useMemo(() => ({ vehicle: VehicleEdge }), []);
@@ -34,6 +36,24 @@ export default function Sandbox() {
   const sentEdges = useRef<Set<string>>(new Set());
   const sentNodes = useRef<Set<string>>(new Set());
   const nextNodeId = useRef<number>(1000);
+
+  const handleStartSim = async () => {
+    setSimLoading(true);
+    try {
+      await fetch('http://localhost:8001/sim/start', { method: 'POST' });
+      setSimRunning(true);
+    } catch (e) { console.error('Failed to start sim', e); }
+    setSimLoading(false);
+  };
+
+  const handleStopSim = async () => {
+    setSimLoading(true);
+    try {
+      await fetch('http://localhost:8001/sim/stop', { method: 'POST' });
+      setSimRunning(false);
+    } catch (e) { console.error('Failed to stop sim', e); }
+    setSimLoading(false);
+  };
 
   useEffect(() => {
     if (!connected) return;
@@ -281,6 +301,24 @@ export default function Sandbox() {
              <button onClick={handleResetMap} style={{ padding: '8px 16px', backgroundColor: '#F44336', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Reset Map</button>
              <button onClick={handleToggleMode} style={{ padding: '8px 16px', backgroundColor: globalMode === 'AI' ? '#FFD700' : '#777', color: 'black', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
                Mode: {globalMode === 'STATIC' ? 'Static Timers' : 'Smart AI'}
+             </button>
+             {/* Sim Start / Stop */}
+             <button
+               onClick={simRunning ? handleStopSim : handleStartSim}
+               disabled={simLoading}
+               style={{
+                 padding: '8px 18px',
+                 backgroundColor: simRunning ? '#ff5722' : '#00c853',
+                 color: 'white',
+                 border: 'none',
+                 borderRadius: '4px',
+                 cursor: simLoading ? 'not-allowed' : 'pointer',
+                 fontWeight: 'bold',
+                 opacity: simLoading ? 0.6 : 1,
+                 minWidth: '110px'
+               }}
+             >
+               {simLoading ? '...' : simRunning ? '⏹ Stop Sim' : '▶ Start Sim'}
              </button>
            </Panel>
            <Background color="#333" gap={16} />
