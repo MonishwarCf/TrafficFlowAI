@@ -71,9 +71,23 @@ export default function Sandbox() {
       let hasChanges = false;
       const newNds = nds.map(n => {
         const realTimeNode = realtimeNodes[n.id];
-        if (realTimeNode && JSON.stringify(realTimeNode.light) !== JSON.stringify(n.data.light)) {
-          hasChanges = true;
-          return { ...n, data: { ...n.data, light: realTimeNode.light } };
+        if (realTimeNode) {
+          const lightChanged = JSON.stringify(realTimeNode.light) !== JSON.stringify(n.data.light);
+          const densityChanged = realTimeNode.density !== n.data.density;
+          const statusChanged = realTimeNode.status !== n.data.status;
+          
+          if (lightChanged || densityChanged || statusChanged) {
+            hasChanges = true;
+            return { 
+              ...n, 
+              data: { 
+                ...n.data, 
+                light: realTimeNode.light,
+                density: realTimeNode.density,
+                status: realTimeNode.status
+              } 
+            };
+          }
         }
         return n;
       });
@@ -165,6 +179,15 @@ export default function Sandbox() {
         const targetEdge = possibleEdges[Math.floor(Math.random() * possibleEdges.length)];
         const direction = targetEdge.source === nodeId ? 1 : -1;
         
+        const nextNodeId = targetEdge.source === nodeId ? targetEdge.target : targetEdge.source;
+        
+        sendTopologyUpdate({
+            type: 'proactive_message',
+            source: nodeId,
+            target: nextNodeId,
+            count: 1
+        });
+        
         TransferBus.dispatchEvent(new CustomEvent(`spawn-${targetEdge.id}`, { 
           detail: { color, speed, direction, startTime, totalWaitTime, type }
         }));
@@ -193,7 +216,7 @@ export default function Sandbox() {
        TransferBus.removeEventListener('vehicle_completed', handleCompleted);
        TransferBus.removeEventListener('pain_report', handlePainReport);
     }
-  }, []);
+  }, [sendTopologyUpdate]);
 
   const cityPainRef = useRef(0);
   const throughputRef = useRef(0);
@@ -227,6 +250,17 @@ export default function Sandbox() {
 
   const handleInject = () => {
     if (!selectedEdgeId) return;
+    
+    const selectedEdge = edges.find(e => e.id === selectedEdgeId);
+    if (selectedEdge && selectedEdge.target) {
+        sendTopologyUpdate({
+            type: 'proactive_message',
+            source: selectedEdge.source || 'spawner',
+            target: selectedEdge.target,
+            count: spawnCount
+        });
+    }
+
     setEdges(eds => eds.map(e => {
       if (e.id === selectedEdgeId) {
         return { 

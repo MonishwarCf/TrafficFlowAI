@@ -11,6 +11,13 @@ export default function CustomJunctionNode({ data }: { data: any }) {
 
   const getColor = (state: string) => state === 'Green' ? '#4caf50' : '#f44336';
 
+  const density = data.density || 0;
+  // Create a glowing box shadow based on density (0-20 scale usually in backend, but could be up to 100 on dashboard)
+  // Let's cap intensity mapping based on what causes traffic jams
+  const intensity = Math.min(1.0, density / 20.0);
+  const glowColor = intensity > 0.6 ? `rgba(244, 67, 54, ${intensity})` : intensity > 0.2 ? `rgba(255, 152, 0, ${intensity})` : 'transparent';
+  const glowShadow = intensity > 0.1 ? `0 0 ${40 * intensity}px ${10 * intensity}px ${glowColor}` : 'none';
+
   return (
     <div style={{
       width: '120px', height: '120px',
@@ -20,7 +27,9 @@ export default function CustomJunctionNode({ data }: { data: any }) {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      border: '2px solid #555'
+      border: '2px solid #555',
+      boxShadow: glowShadow,
+      transition: 'box-shadow 0.3s ease-in-out'
     }}>
       {/* North */}
       <Handle type="target" position={Position.Top} id="N_in" style={{ left: '40%', top: -8, width: 16, height: 16, backgroundColor: '#4caf50', border: '2px solid white', zIndex: 20 }} />
