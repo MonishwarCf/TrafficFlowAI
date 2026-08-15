@@ -11,6 +11,7 @@ export interface Vehicle {
   direction: 1 | -1;
   startTime: number;
   totalWaitTime: number;
+  type?: string;
 }
 
 export default function VehicleEdge({
@@ -50,6 +51,8 @@ export default function VehicleEdge({
   const reportWaitingCars = data?.reportWaitingCars;
   const targetNodeType = data?.targetNodeType;
   const sourceNodeType = data?.sourceNodeType;
+  const targetHandleDir = data?.targetHandle ? data.targetHandle.split('_')[0] : 'N';
+  const sourceHandleDir = data?.sourceHandle ? data.sourceHandle.split('_')[0] : 'S';
 
   useEffect(() => {
     if (spawnTrigger > lastSpawnTrigger.current) {
@@ -103,7 +106,10 @@ export default function VehicleEdge({
       }
 
       const totalLength = path.getTotalLength() || 100;
-      let waitingCount = 0;
+      let waitingTarget = 0;
+      let waitingSource = 0;
+      let ambTarget = false;
+      let ambSource = false;
 
       for (let i = 0; i < vehiclesRef.current.length; i++) {
         const car = vehiclesRef.current[i];
@@ -141,7 +147,13 @@ export default function VehicleEdge({
         }
 
         if (stopped && distToEnd >= 0 && distToEnd < 200 && !isHeadingToExit) {
-          waitingCount++;
+          if (car.direction === 1) {
+             waitingTarget++;
+             if (car.type === 'Ambulance') ambTarget = true;
+          } else {
+             waitingSource++;
+             if (car.type === 'Ambulance') ambSource = true;
+          }
         }
       }
 
@@ -168,8 +180,15 @@ export default function VehicleEdge({
       setVehicles([...vehiclesRef.current]);
 
       if (time - lastReportTime > 500) {
-        if (reportWaitingCars && targetNodeId) {
-          reportWaitingCars(id, targetNodeId, waitingCount); // This still reports all waiting cars on edge to target.
+        if (reportWaitingCars) {
+          if (targetNodeId) {
+             const densityTarget = Math.min(1.0, waitingTarget / 15.0);
+             reportWaitingCars(id, targetNodeId, targetHandleDir, waitingTarget, densityTarget, ambTarget);
+          }
+          if (sourceNodeId) {
+             const densitySource = Math.min(1.0, waitingSource / 15.0);
+             reportWaitingCars(id, sourceNodeId, sourceHandleDir, waitingSource, densitySource, ambSource);
+          }
         }
         lastReportTime = time;
       }

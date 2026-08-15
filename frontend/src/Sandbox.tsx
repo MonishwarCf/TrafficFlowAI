@@ -26,6 +26,7 @@ export default function Sandbox() {
   const [spawnCount, setSpawnCount] = useState<number>(5);
   const [avgWaitTime, setAvgWaitTime] = useState<number>(0);
   const [totalCarsFinished, setTotalCarsFinished] = useState<number>(0);
+  const [globalMode, setGlobalMode] = useState<'STATIC' | 'AI'>('STATIC');
 
   const nodeTypes = useMemo(() => ({ junction: CustomJunctionNode, exit: ExitNode, start: StartNode }), []);
   const edgeTypes = useMemo(() => ({ vehicle: VehicleEdge }), []);
@@ -127,11 +128,14 @@ export default function Sandbox() {
     });
   }, [realtimeNodes, setNodes, setEdges, nodes]);
 
-  const reportWaitingCars = useCallback((_edgeId: string, targetNodeId: string, waitingCars: number) => {
+  const reportWaitingCars = useCallback((_edgeId: string, targetNodeId: string, direction: string, waitingCars: number, density: number, hasAmbulance: boolean) => {
     sendTopologyUpdate({
       type: 'vision_sensor',
       nodeId: targetNodeId,
-      waitingCars: waitingCars
+      direction: direction,
+      waitingCars: waitingCars,
+      density: density,
+      hasAmbulance: hasAmbulance
     });
   }, [sendTopologyUpdate]);
 
@@ -230,6 +234,12 @@ export default function Sandbox() {
     sendTopologyUpdate({ type: 'reset' });
   };
 
+  const handleToggleMode = () => {
+    const newMode = globalMode === 'STATIC' ? 'AI' : 'STATIC';
+    setGlobalMode(newMode);
+    sendTopologyUpdate({ type: 'set_mode', mode: newMode });
+  };
+
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#121212', color: 'white' }}>
       <header style={{ padding: '15px 30px', backgroundColor: '#1a1a1a', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #333' }}>
@@ -291,6 +301,9 @@ export default function Sandbox() {
              <button onClick={handleAddStart} style={{ padding: '8px 16px', backgroundColor: '#4caf50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>+ Add Start Node</button>
              <button onClick={handleAddExit} style={{ padding: '8px 16px', backgroundColor: '#9C27B0', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>+ Add Exit Node</button>
              <button onClick={handleResetMap} style={{ padding: '8px 16px', backgroundColor: '#F44336', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Reset Map</button>
+             <button onClick={handleToggleMode} style={{ padding: '8px 16px', backgroundColor: globalMode === 'AI' ? '#FFD700' : '#777', color: 'black', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+               Mode: {globalMode === 'STATIC' ? 'Static Timers' : 'Smart AI'}
+             </button>
            </Panel>
            <Background color="#333" gap={16} />
            <Controls />

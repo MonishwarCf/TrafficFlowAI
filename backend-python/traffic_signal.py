@@ -20,6 +20,15 @@ class TrafficSignal:
         self.incoming = 0
         self.override = None
         self.override_time = 0
+        
+        self.operating_mode = 'STATIC' # 'STATIC' or 'AI'
+        # Future-proofing: store rich telemetry from simulated cameras/CV models
+        self.cv_telemetry = {
+            'N': {'car_count': 0, 'density': 0.0, 'ambulance': False},
+            'S': {'car_count': 0, 'density': 0.0, 'ambulance': False},
+            'E': {'car_count': 0, 'density': 0.0, 'ambulance': False},
+            'W': {'car_count': 0, 'density': 0.0, 'ambulance': False}
+        }
 
     def add_connection(self, direction):
         if direction not in ['N', 'S', 'E', 'W']:
@@ -50,10 +59,14 @@ class TrafficSignal:
             if not self.active_phases:
                 return
 
-            self.phase_timer += 1
-            if self.phase_timer >= self.phase_duration:
-                self.phase_timer = 0
-                self.current_phase_index = (self.current_phase_index + 1) % len(self.active_phases)
+            if self.operating_mode == 'STATIC':
+                self.phase_timer += 1
+                if self.phase_timer >= self.phase_duration:
+                    self.phase_timer = 0
+                    self.current_phase_index = (self.current_phase_index + 1) % len(self.active_phases)
+            elif self.operating_mode == 'AI':
+                # AI Controller will take over current_phase_index externally
+                pass
 
     def action_doer(self):
         with self.lock:
@@ -87,6 +100,23 @@ class TrafficSignal:
             self.override = state
             self.override_time = duration
 
+    def set_mode(self, mode):
+        with self.lock:
+            if mode in ['STATIC', 'AI']:
+                self.operating_mode = mode
+
+    def update_cv_telemetry(self, direction, car_count, density, ambulance):
+        """
+        Receives real inputs from the future CV MODEL (or React vision_sensor).
+        """
+        if direction not in self.cv_telemetry: return
+        with self.lock:
+            self.cv_telemetry[direction] = {
+                'car_count': car_count,
+                'density': density,
+                'ambulance': ambulance
+            }
+
     def stop(self):
         with self.lock:
             self.active = False
@@ -98,5 +128,7 @@ class TrafficSignal:
                 'light': self.light_state.copy(),
                 'density': self.density,
                 'incoming': self.incoming,
-                'active_phases': list(self.active_phases)
+                'active_phases': list(self.active_phases),
+                'mode': self.operating_mode,
+                'cv_telemetry': self.cv_telemetry
             }

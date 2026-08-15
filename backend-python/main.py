@@ -129,10 +129,21 @@ def process_topology_message(ch, method, properties, body):
                     for t in targets:
                         if t in nodes:
                             nodes[t].set_override("Green", 5) # force green for next 5 ticks
+            elif msg_type == "set_mode":
+                mode = msg.get("mode")
+                for n_id, signal in nodes.items():
+                    signal.set_mode(mode)
+                print(f"Global operating mode set to {mode}")
             elif msg_type == "vision_sensor":
                 n_id = msg.get("nodeId")
+                direction = msg.get("direction", "N")
+                count = msg.get("waitingCars", 0)
+                density = msg.get("density", 0.0)
+                ambulance = msg.get("hasAmbulance", False)
                 if n_id in nodes:
-                    nodes[n_id].update_density(msg.get("waitingCars", 0))
+                    nodes[n_id].update_cv_telemetry(direction, count, density, ambulance)
+                    # Backwards compatibility during transition
+                    nodes[n_id].update_density(count)
             elif msg_type == "proactive_message":
                 tgt = msg.get("target")
                 if tgt in nodes:
