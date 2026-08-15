@@ -52,18 +52,20 @@ class AIController:
         return 'L'
 
     def _score_direction(self, direction, all_telemetry):
-        """Scores a direction urgency - Emergency > High > Medium > Low."""
+        """
+        Scores a direction urgency using exponential scaling so larger queues
+        dominate decisively over smaller ones. A 15-car lane will score much
+        higher than a 7-car lane, making starvation cases rare.
+        """
         lane_data = all_telemetry.get(direction, {})
         state = self._discretize(lane_data)
-        density = lane_data.get('density', 0.0)
         car_count = lane_data.get('car_count', 0)
+        density = lane_data.get('density', 0.0)
         if state == 'E':
-            return 1000.0
-        if state == 'H':
-            return density * 100 + car_count
-        if state == 'M':
-            return density * 50 + car_count
-        return density * 10 + car_count
+            return 10000.0  # Ambulance always wins absolutely
+        # Exponential: car_count^1.5 means 15 cars -> 58.1, 7 cars -> 18.5
+        # Gap between 15 and 7 is 3x, not 2x like linear scoring.
+        return (car_count ** 1.5) + (density * 20)
 
     def select_next_phase(self, active_phases, all_telemetry, incoming_by_dir=None, incoming_count=0):
         """
@@ -113,10 +115,11 @@ class AIController:
             q_values = {dur: self.q_table.get((state, dur), 0.0) for dur in self.durations}
             duration = max(q_values, key=q_values.get)
 
-        # Hard floor: duration must be at least enough to clear half the active lane's queue.
-        # This prevents the AI from picking 5s for a lane with 20 cars waiting.
+        # Hard floor: duration must cover the FULL queue, not half.
+        # car_count // 2 was mathematically guaranteeing queues never drain.
+        # Now: 12 cars -> floor 12s, 20 cars -> floor 20s (capped at 30).
         active_car_count = all_telemetry.get(chosen_dir, {}).get('car_count', 0)
-        min_floor = min(30, max(5, active_car_count // 2))
+        min_floor = min(30, max(5, active_car_count))
         duration = max(duration, min_floor)
 
         self.last_state = state
