@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import ReactFlow, { 
   Background, 
   Controls,
@@ -142,25 +142,7 @@ export default function Sandbox() {
     });
   }, [realtimeNodes, setNodes, setEdges, nodes]);
 
-  const reportWaitingCars = useCallback((_edgeId: string, targetNodeId: string, direction: string, waitingCars: number, density: number, hasAmbulance: boolean) => {
-    sendTopologyUpdate({
-      type: 'vision_sensor',
-      nodeId: targetNodeId,
-      direction: direction,
-      waitingCars: waitingCars,
-      density: density,
-      hasAmbulance: hasAmbulance
-    });
-  }, [sendTopologyUpdate]);
 
-  useEffect(() => {
-    setEdges(eds => eds.map(e => {
-      if (e.data?.reportWaitingCars !== reportWaitingCars) {
-        return { ...e, data: { ...e.data, reportWaitingCars } };
-      }
-      return e;
-    }));
-  }, [reportWaitingCars, setEdges]);
 
   // Logic removed (hoisted to TrafficContext)
 

@@ -109,10 +109,24 @@ export function TrafficProvider({ children }: { children: ReactNode }) {
     };
     TransferBus.addEventListener('pain_report', handlePainReport);
 
+    const handleVisionSensor = (e: any) => {
+      const { targetNodeId, direction, count, density, hasAmbulance } = e.detail;
+      sendTopologyUpdate({
+        type: 'vision_sensor',
+        nodeId: targetNodeId,
+        direction: direction,
+        waitingCars: count,
+        density: density,
+        hasAmbulance: hasAmbulance
+      });
+    };
+    TransferBus.addEventListener('vision_sensor', handleVisionSensor);
+
     return () => {
        TransferBus.removeEventListener('transfer', handleTransfer);
        TransferBus.removeEventListener('vehicle_completed', handleCompleted);
        TransferBus.removeEventListener('pain_report', handlePainReport);
+       TransferBus.removeEventListener('vision_sensor', handleVisionSensor);
     }
   }, [sendTopologyUpdate]);
 

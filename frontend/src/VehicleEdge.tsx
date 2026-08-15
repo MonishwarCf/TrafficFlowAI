@@ -72,7 +72,6 @@ export default function VehicleEdge({
   const spawnTrigger = data?.spawnTrigger || 0;
   const spawnCount = data?.spawnCount || 0;
   const spawnType = data?.spawnType || 'Car';
-  const reportWaitingCars = data?.reportWaitingCars;
   const targetNodeType = data?.targetNodeType;
   const sourceNodeType = data?.sourceNodeType;
   const targetHandleDir = targetHandleId ? targetHandleId.split('_')[0] : 'N';
@@ -208,16 +207,18 @@ export default function VehicleEdge({
             detail: { edgeId: id, pain: localPainIndex, carCount: vehiclesRef.current.length } 
         }));
 
-        if (reportWaitingCars) {
           if (targetNodeId) {
              const targetTelemetry = getLaneTelemetry(vehiclesRef.current, 1, totalLength);
-             reportWaitingCars(id, targetNodeId, targetHandleDir, targetTelemetry.count, targetTelemetry.density, targetTelemetry.hasAmbulance);
+             TransferBus.dispatchEvent(new CustomEvent('vision_sensor', {
+               detail: { targetNodeId, direction: targetHandleDir, count: targetTelemetry.count, density: targetTelemetry.density, hasAmbulance: targetTelemetry.hasAmbulance }
+             }));
           }
           if (sourceNodeId) {
              const sourceTelemetry = getLaneTelemetry(vehiclesRef.current, -1, totalLength);
-             reportWaitingCars(id, sourceNodeId, sourceHandleDir, sourceTelemetry.count, sourceTelemetry.density, sourceTelemetry.hasAmbulance);
+             TransferBus.dispatchEvent(new CustomEvent('vision_sensor', {
+               detail: { targetNodeId: sourceNodeId, direction: sourceHandleDir, count: sourceTelemetry.count, density: sourceTelemetry.density, hasAmbulance: sourceTelemetry.hasAmbulance }
+             }));
           }
-        }
         lastReportTime = time;
       }
 
@@ -226,7 +227,7 @@ export default function VehicleEdge({
 
     frameId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(frameId);
-  }, [targetLight, sourceLight, id, targetNodeId, sourceNodeId, reportWaitingCars, targetNodeType, sourceNodeType]);
+  }, [targetLight, sourceLight, id, targetNodeId, sourceNodeId, targetNodeType, sourceNodeType]);
 
   return (
     <g>

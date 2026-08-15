@@ -14,7 +14,14 @@ function Layout() {
       <div style={{ display: location.pathname === '/' ? 'block' : 'none', height: '100vh' }}>
         <App />
       </div>
-      <div style={{ display: location.pathname === '/sandbox' ? 'block' : 'none', height: '100vh' }}>
+      <div style={{ 
+        position: location.pathname === '/sandbox' ? 'relative' : 'absolute',
+        opacity: location.pathname === '/sandbox' ? 1 : 0,
+        pointerEvents: location.pathname === '/sandbox' ? 'auto' : 'none',
+        zIndex: location.pathname === '/sandbox' ? 1 : -9999,
+        width: '100%',
+        height: '100vh'
+      }}>
         <Sandbox />
       </div>
       <div style={{ display: location.pathname === '/logs' ? 'block' : 'none', height: '100vh' }}>
