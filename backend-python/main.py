@@ -23,6 +23,7 @@ nodes = {} # node_id -> TrafficSignal
 edges = {} # node_id -> set of connected node_ids
 nodes_lock = threading.Lock()
 publish_queue = queue.Queue()
+global_operating_mode = 'STATIC'
 
 def node_simulator(node_id):
     print(f"Started simulator for node {node_id}")
@@ -79,6 +80,7 @@ def publisher_thread():
             time.sleep(3)
 
 def process_topology_message(ch, method, properties, body):
+    global global_operating_mode
     try:
         msg = json.loads(body)
         print(f"Topology update: {msg}")
@@ -95,6 +97,7 @@ def process_topology_message(ch, method, properties, body):
                 node_id = msg.get("id")
                 if node_id and node_id not in nodes:
                     nodes[node_id] = TrafficSignal(node_id)
+                    nodes[node_id].set_mode(global_operating_mode)
                     # By default assume all nodes have N, S, E, W just in case
                     # But we'll rely on add_edge to add true connections.
                     t = threading.Thread(target=node_simulator, args=(node_id,), daemon=True)
@@ -130,10 +133,10 @@ def process_topology_message(ch, method, properties, body):
                         if t in nodes:
                             nodes[t].set_override("Green", 5) # force green for next 5 ticks
             elif msg_type == "set_mode":
-                mode = msg.get("mode")
+                global_operating_mode = msg.get("mode")
                 for n_id, signal in nodes.items():
-                    signal.set_mode(mode)
-                print(f"Global operating mode set to {mode}")
+                    signal.set_mode(global_operating_mode)
+                print(f"Global operating mode set to {global_operating_mode}")
             elif msg_type == "vision_sensor":
                 n_id = msg.get("nodeId")
                 direction = msg.get("direction", "N")
