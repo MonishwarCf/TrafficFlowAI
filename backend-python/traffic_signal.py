@@ -14,7 +14,7 @@ class TrafficSignal:
         
         self.light_state = {'N': 'Red', 'S': 'Red', 'E': 'Red', 'W': 'Red'}
         self.active = True
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         
         # Additional state
         self.density = 0

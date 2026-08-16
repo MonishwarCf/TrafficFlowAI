@@ -1,5 +1,7 @@
-import time
-from backend_python.traffic_signal import TrafficSignal
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), 'backend-python'))
+from traffic_signal import TrafficSignal
 
 node = TrafficSignal("Node1")
 node.add_connection("N")
