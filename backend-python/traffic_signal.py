@@ -14,7 +14,7 @@ class TrafficSignal:
         
         self.light_state = {'N': 'Red', 'S': 'Red', 'E': 'Red', 'W': 'Red'}
         self.active = True
-        self.lock = threading.RLock()
+        self.lock = threading.RLock() # Upgraded to RLock to prevent QA deadlock bugs
         
         # Additional state
         self.density = 0
@@ -27,7 +27,7 @@ class TrafficSignal:
         
         self.ai = AIController()
         self.ai_phase_timer = 0
-        self.ai_phase_duration = 5 # 5s decision intervals for fixed-step control
+        self.ai_phase_duration = 10 # Decision cycle fixed to 10 seconds to act as safety floor
         
         # Graph Message-Passing neighbors features state
         self.neighbor_map = {}       # direction -> connected_node_id
@@ -89,46 +89,50 @@ class TrafficSignal:
                     self.current_phase_index = (self.current_phase_index + 1) % len(self.active_phases)
                     self.logs.append(f"Static: Switched to {self.active_phases[self.current_phase_index]} for {self.phase_duration}s")
             elif self.operating_mode == 'AI':
-                # Check for ambulance override preemption
+                # Check if intersection is completely empty to prevent spammed model calculations
+                total_waiting = sum(data.get('car_count', 0) for data in self.cv_telemetry.values())
+                if total_waiting == 0:
+                    self.ai_phase_timer = 0
+                    # Keep current green light if empty and bypass model evaluation
+                    return
+
+                # Check for ambulance override preemption (Priority Action Masking)
                 ambulance_dir = None
                 for d in self.active_phases:
                     if self.cv_telemetry.get(d, {}).get('ambulance', False):
                         ambulance_dir = d
                         break
 
+                if ambulance_dir is not None:
+                    # Enforce hard override direction
+                    self.current_phase_index = self.active_phases.index(ambulance_dir)
+                    self.ai_phase_timer = 0
+                    return
+
                 self.ai_phase_timer += 1
 
-                # Fixed-step decision boundary every 5 seconds
+                # Fixed-step decision boundary every 10 seconds
                 if self.ai_phase_timer >= self.ai_phase_duration:
                     self.ai_phase_timer = 0
                     
-                    # 1. Action Decision (Priority Masking Override vs GAT Policy)
-                    if ambulance_dir is not None:
-                        active_dir = self.active_phases[self.current_phase_index]
-                        # If active phase is already ambulance lane, Keep (0). Else Switch (1)
-                        action = 0 if active_dir == ambulance_dir else 1
-                        self.logs.append(f"AI Override: Ambulance on {ambulance_dir} -> Forced Action {action}")
-                    else:
-                        # GAT Feature Convolutions
-                        local_feats = self.get_local_features()
-                        neighbor_feats = list(self.neighbor_features.values())
-                        action = run_agent_decision(self.ai, local_feats, neighbor_feats)
-                        self.logs.append(f"AI: Decided Action {action} (0=Keep, 1=Switch)")
-
-                    # 2. Execute Decision
-                    if action == 1:
-                        self.current_phase_index = (self.current_phase_index + 1) % len(self.active_phases)
+                    # 1. Action Decision (Phase Selection via GAT Policy)
+                    local_feats = self.get_local_features()
+                    neighbor_feats = list(self.neighbor_features.values())
+                    
+                    chosen_dir = run_agent_decision(self.ai, local_feats, neighbor_feats, self.active_phases)
+                    if chosen_dir in self.active_phases:
+                        self.current_phase_index = self.active_phases.index(chosen_dir)
+                    self.logs.append(f"AI: Selected Phase {chosen_dir} (Phase Selection)")
                         
-                    # 3. Calculate Reward & Update Q-Approximator
-                    total_waiting = sum(data.get('car_count', 0) for data in self.cv_telemetry.values())
-                    reward = -total_waiting
+                    # 2. Calculate Reward: Reward = -(Waiting Cars + Beta * Queue density)
+                    total_density = sum(data.get('density', 0.0) for data in self.cv_telemetry.values())
+                    reward = -(total_waiting + 0.5 * total_density)
                     
                     next_local = self.get_local_features()
                     next_neighbor = list(self.neighbor_features.values())
                     
-                    # Bypass policy training if overridden by priority safety rules
-                    if ambulance_dir is None:
-                        update_agent_rewards(self.ai, reward, next_local, next_neighbor)
+                    # Run Q-learning policy update
+                    update_agent_rewards(self.ai, reward, next_local, next_neighbor, self.active_phases)
 
     def action_doer(self):
         with self.lock:

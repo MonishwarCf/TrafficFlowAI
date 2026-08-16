@@ -5,7 +5,8 @@ class AIController:
     """
     Decentralized Graph Attention Network (GAT) AI Controller.
     Uses Message-Passing representation learning to coordinate with neighbors.
-    Approximates action Q-values (0: Keep, 1: Switch) using linear TD-learning.
+    Approximates action Q-values for Phase Selection (a_t in active_phases)
+    using directional weight vectors Theta[d].
     """
     def __init__(self):
         # Set random seeds for consistent baseline initialization
@@ -21,10 +22,13 @@ class AIController:
         self.W_a = np.random.randn(self.hidden_dim, self.feat_dim) * 0.1  # Attention projection
         self.V = np.random.randn(self.hidden_dim * 2) * 0.1              # Attention vector
         
-        # Policy Network Linear Q-Approximator: Q(h_i, a) = Theta[a]^T * h_i
+        # Policy Network Linear Q-Approximator: Q(h_i, d) = Theta[d]^T * h_i
+        # One weight vector of dim 8 for each possible direction approach N, S, E, W
         self.Theta = {
-            0: np.random.randn(self.hidden_dim) * 0.1,  # Keep action weights
-            1: np.random.randn(self.hidden_dim) * 0.1   # Switch action weights
+            'N': np.random.randn(self.hidden_dim) * 0.1,
+            'S': np.random.randn(self.hidden_dim) * 0.1,
+            'E': np.random.randn(self.hidden_dim) * 0.1,
+            'W': np.random.randn(self.hidden_dim) * 0.1
         }
         
         # RL Hyperparameters
@@ -34,7 +38,7 @@ class AIController:
         
         # Memory buffers for Temporal Difference learning updates
         self.last_h = None
-        self.last_action = None
+        self.last_action = None  # Will be a direction letter ('N', 'S', 'E', 'W')
         self.last_q_value = 0.0
         self.last_loss = 0.0
 
@@ -87,21 +91,20 @@ class AIController:
         h_i = np.maximum(0.0, proj_i + agg_neighbors)
         return h_i
 
-    def select_action(self, h_i):
+    def select_action(self, h_i, active_phases):
         """
-        Selects Keep (0) or Switch (1) based on GAT hidden vector h_i.
+        Selects a direction from active_phases based on GAT hidden vector h_i.
         Uses epsilon-greedy exploration.
         """
-        # Q(h_i, a) = Theta[a] . h_i
+        # Q(h_i, d) = Theta[d] . h_i
         q_values = {
-            0: float(np.dot(h_i, self.Theta[0])),
-            1: float(np.dot(h_i, self.Theta[1]))
+            d: float(np.dot(h_i, self.Theta[d])) for d in active_phases
         }
         
         if random.random() < self.epsilon:
-            action = random.choice([0, 1])
+            action = random.choice(active_phases)
         else:
-            action = 0 if q_values[0] > q_values[1] else 1
+            action = max(q_values, key=q_values.get)
             
         self.last_h = h_i
         self.last_action = action
@@ -109,17 +112,16 @@ class AIController:
         
         return action
 
-    def update_policy(self, reward, next_h_i):
+    def update_policy(self, reward, next_h_i, next_active_phases):
         """
         Updates the approximator weights (Theta) using Temporal Difference Q-learning.
         """
-        if self.last_h is None or self.last_action is None:
+        if self.last_h is None or self.last_action is None or not next_active_phases:
             return
             
         # Compute max Q-value of the next state
         q_next = {
-            0: float(np.dot(next_h_i, self.Theta[0])),
-            1: float(np.dot(next_h_i, self.Theta[1]))
+            d: float(np.dot(next_h_i, self.Theta[d])) for d in next_active_phases
         }
         max_q_next = max(q_next.values())
         
@@ -127,7 +129,7 @@ class AIController:
         target = reward + self.gamma * max_q_next
         td_error = target - self.last_q_value
         
-        # Policy gradient update on weights
+        # Policy gradient update on weights for the action (direction) taken
         self.Theta[self.last_action] += self.alpha * td_error * self.last_h
         
         # Record squared TD error as loss metrics
@@ -141,21 +143,21 @@ class AIController:
 # MODULAR AGENT ENTRANCE (MODIFIABLE ACTION ZONE)
 # =====================================================================
 
-def run_agent_decision(controller, local_features, neighbor_features):
+def run_agent_decision(controller, local_features, neighbor_features, active_phases):
     """
     MODULAR AGENT ACTION FUNCTION
-    Runs GAT message aggregation and returns action 0 (Keep) or 1 (Switch).
+    Runs GAT message aggregation and returns the chosen phase direction (e.g. 'N', 'S').
     """
     # # your code goes here
     h_i = controller.run_gat(local_features, neighbor_features)
-    action = controller.select_action(h_i)
-    return action
+    chosen_dir = controller.select_action(h_i, active_phases)
+    return chosen_dir
 
-def update_agent_rewards(controller, reward, next_local_features, next_neighbor_features):
+def update_agent_rewards(controller, reward, next_local_features, next_neighbor_features, next_active_phases):
     """
     MODULAR REWARD / LOSS UPDATE FUNCTION
     Calculates next state features and performs TD-gradient step.
     """
     # # your code goes here
     next_h_i = controller.run_gat(next_local_features, next_neighbor_features)
-    controller.update_policy(reward, next_h_i)
+    controller.update_policy(reward, next_h_i, next_active_phases)

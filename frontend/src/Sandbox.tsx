@@ -20,7 +20,7 @@ export default function Sandbox() {
     nodes, setNodes, onNodesChange, 
     edges, setEdges, onEdgesChange, onConnect,
     isSpawnMode, setIsSpawnMode,
-    cityPainIndex, totalCarsFinished, realtimeNodes, connected, sendTopologyUpdate
+    cityPainIndex, avgWaitCompleted, maxWaitActive, totalCarsFinished, realtimeNodes, connected, sendTopologyUpdate
   } = useTrafficContext();
   
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
@@ -238,9 +238,14 @@ export default function Sandbox() {
       <header style={{ padding: '15px 30px', backgroundColor: '#1a1a1a', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #333' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           <h2 style={{ margin: 0, color: '#4caf50' }}>Traffic AI Sandbox (React Flow)</h2>
-          <div style={{ background: '#333', padding: '5px 15px', borderRadius: '4px', fontSize: '14px' }}>
-            City Pain Index: <strong style={{ color: '#ffeb3b', fontSize: '18px' }}>{Math.round(cityPainIndex)}</strong> 
-            <span style={{ marginLeft: '10px', color: '#888' }}>(Throughput: {totalCarsFinished})</span>
+          <div style={{ display: 'flex', gap: '15px', background: '#333', padding: '5px 15px', borderRadius: '4px', fontSize: '14px', alignItems: 'center' }}>
+            <div>Avg Wait (Active): <strong style={{ color: '#ffeb3b', fontSize: '16px' }}>{cityPainIndex}s</strong></div>
+            <div style={{ width: '1px', height: '15px', backgroundColor: '#555' }}></div>
+            <div>Avg Wait (Completed): <strong style={{ color: '#03a9f4', fontSize: '16px' }}>{avgWaitCompleted}s</strong></div>
+            <div style={{ width: '1px', height: '15px', backgroundColor: '#555' }}></div>
+            <div>Max Wait: <strong style={{ color: '#f44336', fontSize: '16px' }}>{maxWaitActive}s</strong></div>
+            <div style={{ width: '1px', height: '15px', backgroundColor: '#555' }}></div>
+            <div style={{ color: '#aaa' }}>Throughput: <strong style={{ color: '#4caf50' }}>{totalCarsFinished}</strong></div>
           </div>
         </div>
         <div>

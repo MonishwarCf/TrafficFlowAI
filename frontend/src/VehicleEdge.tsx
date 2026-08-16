@@ -150,7 +150,6 @@ export default function VehicleEdge({
       const dt = Math.min(3.0, rawDt / 16.67);
 
       const totalLength = path.getTotalLength() || 100;
-      let localPainIndex = 0;
 
       for (let i = 0; i < vehiclesRef.current.length; i++) {
         const car = vehiclesRef.current[i];
@@ -188,9 +187,6 @@ export default function VehicleEdge({
         } else {
           car.totalWaitTime += rawDt;
         }
-
-        const weight = car.type === 'Ambulance' ? 50 : 1;
-        localPainIndex += (car.totalWaitTime / 1000) * weight;
       }
 
       vehiclesRef.current = vehiclesRef.current.filter(c => {
@@ -216,8 +212,17 @@ export default function VehicleEdge({
       setVehicles([...vehiclesRef.current]);
 
       if (time - lastReportTime > 500) {
+        const activeCars = vehiclesRef.current;
+        const totalWaitTime = activeCars.reduce((sum, c) => sum + c.totalWaitTime, 0);
+        const maxWait = activeCars.length > 0 ? Math.max(...activeCars.map(c => c.totalWaitTime)) : 0;
+
         TransferBus.dispatchEvent(new CustomEvent('pain_report', { 
-            detail: { edgeId: id, pain: localPainIndex, carCount: vehiclesRef.current.length } 
+            detail: { 
+              edgeId: id, 
+              carCount: activeCars.length,
+              totalWaitTime: totalWaitTime,
+              maxWait: maxWait
+            } 
         }));
 
         if (targetNodeId) {
