@@ -155,3 +155,35 @@ class AIController:
         """Backward compat shim for STATIC mode."""
         _, duration = self.select_next_phase([active_direction], all_telemetry, incoming_count=incoming_count)
         return duration
+
+# =====================================================================
+# MODULAR AGENT ENTRANCE (MODIFIABLE ACTION ZONE)
+# =====================================================================
+
+def run_agent_decision(controller, active_phases, cv_telemetry, incoming_by_dir):
+    """
+    MODULAR AGENT ACTION FUNCTION
+    Processes intersection status and determines phase selection & duration.
+    
+    Inputs:
+        - controller: AIController instance containing persistent model state (like Q-tables)
+        - active_phases: List of connected directions (e.g. ['N', 'S', 'E', 'W'])
+        - cv_telemetry: Dict containing count, density, and ambulance flags per lane
+        - incoming_by_dir: Dict of incoming platoon counts per lane
+        
+    Returns:
+        - chosen_dir: String lane to set Green next (e.g. 'N')
+        - duration: Integer duration to run the Green phase
+    """
+    # # your code goes here
+    chosen_dir, duration = controller.select_next_phase(active_phases, cv_telemetry, incoming_by_dir)
+    return chosen_dir, duration
+
+def update_agent_rewards(controller, reward):
+    """
+    MODULAR REWARD / LOSS UPDATE FUNCTION
+    Executes training adjustments on the model at the end of each phase.
+    """
+    # # your code goes here
+    controller.update_q_value(reward)
+

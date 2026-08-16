@@ -1,6 +1,6 @@
 import threading
 import time
-from ai_controller import AIController
+from ai_controller import AIController, run_agent_decision, update_agent_rewards
 
 class TrafficSignal:
     def __init__(self, node_id):
@@ -74,7 +74,7 @@ class TrafficSignal:
                     self.logs.append(f"Static: Switched to {self.active_phases[self.current_phase_index]} for {self.phase_duration}s")
             elif self.operating_mode == 'AI':
                 if self.ai_phase_duration == 0 and self.active_phases:
-                    chosen_dir, duration = self.ai.select_next_phase(self.active_phases, self.cv_telemetry, incoming_by_dir=self.incoming)
+                    chosen_dir, duration = run_agent_decision(self.ai, self.active_phases, self.cv_telemetry, self.incoming)
                     if chosen_dir:
                         self.current_phase_index = self.active_phases.index(chosen_dir)
                     self.ai_phase_duration = duration
@@ -85,12 +85,12 @@ class TrafficSignal:
                     # Calculate reward for the just-completed phase
                     total_waiting = sum(data.get('car_count', 0) for data in self.cv_telemetry.values())
                     reward = -total_waiting
-                    self.ai.update_q_value(reward)
+                    update_agent_rewards(self.ai, reward)
 
                     self.ai_phase_timer = 0
                     self.incoming = {'N': 0, 'S': 0, 'E': 0, 'W': 0}  # reset all incoming after phase
                     if self.active_phases:
-                        chosen_dir, duration = self.ai.select_next_phase(self.active_phases, self.cv_telemetry, incoming_by_dir=self.incoming)
+                        chosen_dir, duration = run_agent_decision(self.ai, self.active_phases, self.cv_telemetry, self.incoming)
                         if chosen_dir:
                             self.current_phase_index = self.active_phases.index(chosen_dir)
                         self.ai_phase_duration = duration
