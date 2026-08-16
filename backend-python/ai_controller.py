@@ -5,8 +5,7 @@ class AIController:
     """
     Decentralized Graph Attention Network (GAT) AI Controller.
     Uses Message-Passing representation learning to coordinate with neighbors.
-    Approximates action Q-values for Phase Selection (a_t in active_phases)
-    using directional weight vectors Theta[d].
+    Approximates action Q-values (selecting direct Green lanes N, S, E, W) using linear TD-learning.
     """
     def __init__(self):
         # Set random seeds for consistent baseline initialization
@@ -22,8 +21,8 @@ class AIController:
         self.W_a = np.random.randn(self.hidden_dim, self.feat_dim) * 0.1  # Attention projection
         self.V = np.random.randn(self.hidden_dim * 2) * 0.1              # Attention vector
         
-        # Policy Network Linear Q-Approximator: Q(h_i, d) = Theta[d]^T * h_i
-        # One weight vector of dim 8 for each possible direction approach N, S, E, W
+        # Policy Network Linear Q-Approximator: Q(h_i, direction) = Theta[direction]^T * h_i
+        # Maps hidden state to Q-values for direct phase selection (N, S, E, W)
         self.Theta = {
             'N': np.random.randn(self.hidden_dim) * 0.1,
             'S': np.random.randn(self.hidden_dim) * 0.1,
@@ -38,7 +37,7 @@ class AIController:
         
         # Memory buffers for Temporal Difference learning updates
         self.last_h = None
-        self.last_action = None  # Will be a direction letter ('N', 'S', 'E', 'W')
+        self.last_action = None
         self.last_q_value = 0.0
         self.last_loss = 0.0
 
@@ -93,43 +92,38 @@ class AIController:
 
     def select_action(self, h_i, active_phases):
         """
-        Selects a direction from active_phases based on GAT hidden vector h_i.
+        Selects next Green direction phase index directly using GAT features.
         Uses epsilon-greedy exploration.
         """
-        # Q(h_i, d) = Theta[d] . h_i
-        q_values = {
-            d: float(np.dot(h_i, self.Theta[d])) for d in active_phases
-        }
+        q_values = {d: float(np.dot(h_i, self.Theta[d])) for d in active_phases}
         
         if random.random() < self.epsilon:
-            action = random.choice(active_phases)
+            chosen_dir = random.choice(active_phases)
         else:
-            action = max(q_values, key=q_values.get)
+            chosen_dir = max(q_values, key=q_values.get)
             
         self.last_h = h_i
-        self.last_action = action
-        self.last_q_value = q_values[action]
+        self.last_action = chosen_dir
+        self.last_q_value = q_values[chosen_dir]
         
-        return action
+        return chosen_dir
 
     def update_policy(self, reward, next_h_i, next_active_phases):
         """
         Updates the approximator weights (Theta) using Temporal Difference Q-learning.
         """
-        if self.last_h is None or self.last_action is None or not next_active_phases:
+        if self.last_h is None or self.last_action is None:
             return
             
-        # Compute max Q-value of the next state
-        q_next = {
-            d: float(np.dot(next_h_i, self.Theta[d])) for d in next_active_phases
-        }
-        max_q_next = max(q_next.values())
+        # Compute max Q-value of the next state over valid active phases
+        q_next = {d: float(np.dot(next_h_i, self.Theta[d])) for d in next_active_phases}
+        max_q_next = max(q_next.values()) if q_next else 0.0
         
         # Bellman Target
         target = reward + self.gamma * max_q_next
         td_error = target - self.last_q_value
         
-        # Policy gradient update on weights for the action (direction) taken
+        # Policy gradient update on weights
         self.Theta[self.last_action] += self.alpha * td_error * self.last_h
         
         # Record squared TD error as loss metrics

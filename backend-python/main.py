@@ -75,7 +75,7 @@ def node_simulator(node_id):
             publish_queue.put(('traffic.' + node_id, message))
         except Exception as e:
             print(f"Error in node_simulator {node_id}: {e}")
-        time.sleep(0.1) # 10x simulation speedup so 10s phases take 1s real-time
+        time.sleep(1) # Faster simulation cycle so 10s phases feel responsive
 
 def publisher_thread():
     while True:
@@ -164,23 +164,16 @@ def process_topology_message(ch, method, properties, body):
                 count = msg.get("waitingCars", 0)
                 density = msg.get("density", 0.0)
                 ambulance = msg.get("hasAmbulance", False)
-                total_wait_time = msg.get("totalWaitTime", 0.0)
-                max_wait = msg.get("maxWait", 0.0)
-                
                 if n_id in nodes:
-                    nodes[n_id].update_cv_telemetry(direction, count, density, ambulance, total_wait_time, max_wait)
+                    nodes[n_id].update_cv_telemetry(direction, count, density, ambulance)
+                    # Backwards compatibility during transition
                     nodes[n_id].update_density(count)
             elif msg_type == "proactive_message":
-                src = msg.get("source")
                 tgt = msg.get("target")
-                direction = msg.get("targetDir", "N")
-                count = msg.get("count", 0)
-                
+                direction = msg.get("targetDir", "N")  # which direction cars will arrive from
                 if tgt in nodes:
-                    nodes[tgt].add_incoming(direction, count)
-                    print(f"Node {tgt} [{direction}] received proactive alert: {count} cars incoming from {src}!")
-                if src in nodes:
-                    nodes[src].increment_throughput(count)
+                    nodes[tgt].add_incoming(direction, msg.get("count", 0))
+                    print(f"Node {tgt} [{direction}] received proactive alert: {msg.get('count')} cars incoming from {msg.get('source')}!")
     except Exception as e:
         print(f"Error processing topology msg: {e}")
 

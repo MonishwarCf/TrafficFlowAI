@@ -1,21 +1,23 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
-import { Node, Edge, Connection, applyNodeChanges, applyEdgeChanges, addEdge, NodeChange, EdgeChange } from 'reactflow';
+import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect, useRef } from 'react';
+import { Node, Edge, applyNodeChanges, applyEdgeChanges, NodeChange, EdgeChange, addEdge, Connection } from 'reactflow';
 import { useTrafficWebSocket, TrafficData } from './hooks/useTrafficWebSocket';
 
 interface TrafficContextType {
   nodes: Node[];
-  onNodesChange: (changes: NodeChange[]) => void;
   edges: Edge[];
+  onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
   setNodes: React.Dispatch<React.SetStateAction<Node[]>>;
   setEdges: React.Dispatch<React.SetStateAction<Edge[]>>;
   isSpawnMode: boolean;
   setIsSpawnMode: (mode: boolean) => void;
-  cityPainIndex: number;          // Represents average active wait time (in seconds)
-  avgWaitCompleted: number;       // Average completed wait time (in seconds)
-  maxWaitActive: number;          // Maximum wait time experienced by any active car (in seconds)
+  cityPainIndex: number; // legacy fallback
   totalCarsFinished: number;
+  avgWaitCompleted: number;
+  avgWaitActive: number;
+  tMax: number;
+  throughput: number;
   metricsHistory: any[];
   realtimeNodes: Record<string, TrafficData>;
   history: TrafficData[];
@@ -37,20 +39,38 @@ export function TrafficProvider({ children }: { children: ReactNode }) {
   const [isSpawnMode, setIsSpawnMode] = useState<boolean>(false);
   
   const [cityPainIndex, setCityPainIndex] = useState<number>(0);
-  const [avgWaitCompleted, setAvgWaitCompleted] = useState<number>(0);
-  const [maxWaitActive, setMaxWaitActive] = useState<number>(0);
   const [totalCarsFinished, setTotalCarsFinished] = useState<number>(0);
+  const [avgWaitCompleted, setAvgWaitCompleted] = useState<number>(0);
+  const [avgWaitActive, setAvgWaitActive] = useState<number>(0);
+  const [tMax, setTMax] = useState<number>(0);
+  const [throughput, setThroughput] = useState<number>(0);
   const [metricsHistory, setMetricsHistory] = useState<any[]>([]);
   
-  const totalCompletedWaitTimeRef = useRef<number>(0);
-  const totalCompletedCarsRef = useRef<number>(0);
-  
+  const startTimeRef = useRef<number | null>(null);
+  const completedWaitSecRef = useRef<number>(0);
+  const painMapRef = useRef<Map<string, { totalWait: number, maxWait: number, carCount: number }>>(new Map());
+
   const { nodes: realtimeNodes, history, connected, eventLogs, sendTopologyUpdate } = useTrafficWebSocket();
   const edgesRef = useRef<Edge[]>(edges);
   
   useEffect(() => {
     edgesRef.current = edges;
   }, [edges]);
+
+  // Reset metrics when topology is cleared
+  useEffect(() => {
+    if (nodes.length === 0) {
+      setAvgWaitCompleted(0);
+      setAvgWaitActive(0);
+      setTMax(0);
+      setThroughput(0);
+      setTotalCarsFinished(0);
+      startTimeRef.current = null;
+      completedWaitSecRef.current = 0;
+      painMapRef.current.clear();
+      setCityPainIndex(0);
+    }
+  }, [nodes]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => setNodes((nds) => applyNodeChanges(changes, nds)), []);
   const onEdgesChange = useCallback((changes: EdgeChange[]) => setEdges((eds) => applyEdgeChanges(changes, eds)), []);
@@ -67,26 +87,26 @@ export function TrafficProvider({ children }: { children: ReactNode }) {
     }, eds));
   }, []);
 
-  // Listen to physics and simulation events on the TransferBus
   useEffect(() => {
     const handleTransfer = (e: any) => {
-      const { nodeId, color, speed, startTime, totalWaitTime, type } = e.detail;
-      const targetEdge = edgesRef.current.find(edge => edge.source === nodeId);
+      const { nodeId, sourceEdgeId, color, speed, startTime, totalWaitTime, type } = e.detail;
+      const possibleEdges = edgesRef.current.filter(edge => 
+        edge.id !== sourceEdgeId && (edge.source === nodeId || edge.target === nodeId)
+      );
       
-      if (targetEdge) {
-        const nextNodeId = targetEdge.target;
-        const targetHandleDir = targetEdge.data?.targetHandle === 'left' ? 'W' :
-                               targetEdge.data?.targetHandle === 'right' ? 'E' :
-                               targetEdge.data?.targetHandle === 'top' ? 'N' : 'S';
+      if (possibleEdges.length > 0) {
+        const targetEdge = possibleEdges[Math.floor(Math.random() * possibleEdges.length)];
+        const direction = targetEdge.source === nodeId ? 1 : -1;
+        const nextNodeId = targetEdge.source === nodeId ? targetEdge.target : targetEdge.source;
         
-        const direction = targetEdge.sourceHandle === 'left' || targetEdge.sourceHandle === 'right' ? 1 : 1;
-        
+        // Derive the direction the cars will arrive FROM (the target handle of the edge)
+        const targetHandleDir = (targetEdge.data?.targetHandle || 'N') as string;
         sendTopologyUpdate({
-          type: 'proactive_message',
-          source: nodeId,
-          target: nextNodeId,
-          targetDir: targetHandleDir,
-          count: 1
+            type: 'proactive_message',
+            source: nodeId,
+            target: nextNodeId,
+            targetDir: targetHandleDir,
+            count: 1
         });
         
         TransferBus.dispatchEvent(new CustomEvent(`spawn-${targetEdge.id}`, { 
@@ -96,41 +116,49 @@ export function TrafficProvider({ children }: { children: ReactNode }) {
     };
     
     const handleCompleted = (e: any) => {
-      const { waitTime } = e.detail; // in milliseconds
-      setTotalCarsFinished(prevTotal => prevTotal + 1);
-      
-      totalCompletedCarsRef.current += 1;
-      totalCompletedWaitTimeRef.current += (waitTime / 1000); // convert to seconds
-      
-      const avg = totalCompletedWaitTimeRef.current / totalCompletedCarsRef.current;
-      setAvgWaitCompleted(Math.round(avg * 10) / 10);
+      const { waitTime } = e.detail;
+      completedWaitSecRef.current += waitTime / 1000;
+
+      setTotalCarsFinished(prevTotal => {
+        const nextTotal = prevTotal + 1;
+        
+        if (startTimeRef.current === null) {
+          startTimeRef.current = Date.now();
+        }
+        
+        const durationSec = (Date.now() - startTimeRef.current) / 1000;
+        const q = durationSec > 0 ? (nextTotal / durationSec) * 60 : 0;
+        setThroughput(Math.round(q * 10) / 10);
+        
+        const avgCompleted = completedWaitSecRef.current / nextTotal;
+        setAvgWaitCompleted(Math.round(avgCompleted * 10) / 10);
+        
+        return nextTotal;
+      });
     };
 
-    TransferBus.addEventListener('transfer', handleTransfer);
-    TransferBus.addEventListener('vehicle_completed', handleCompleted);
-
-    const activeEdgeMap = new Map<string, { carCount: number, totalWaitTime: number, maxWait: number }>();
     const handlePainReport = (e: any) => {
-      const { edgeId, carCount, totalWaitTime, maxWait } = e.detail;
-      activeEdgeMap.set(edgeId, { carCount, totalWaitTime, maxWait });
+      const { edgeId, totalWait, maxWait, carCount } = e.detail;
+      painMapRef.current.set(edgeId, { totalWait, maxWait, carCount });
       
-      let sumWaitTime = 0;
-      let sumCars = 0;
-      let globalMaxWait = 0;
+      let sumActiveWait = 0;
+      let sumActiveCars = 0;
+      let maxActiveWait = 0;
       
-      activeEdgeMap.forEach(v => {
-        sumWaitTime += v.totalWaitTime;
-        sumCars += v.carCount;
-        if (v.maxWait > globalMaxWait) {
-          globalMaxWait = v.maxWait;
+      painMapRef.current.forEach(v => {
+        sumActiveWait += v.totalWait;
+        sumActiveCars += v.carCount;
+        if (v.maxWait > maxActiveWait) {
+          maxActiveWait = v.maxWait;
         }
       });
       
-      const avgWaitActive = sumCars > 0 ? (sumWaitTime / sumCars / 1000) : 0;
-      setCityPainIndex(Math.round(avgWaitActive * 10) / 10);
-      setMaxWaitActive(Math.round((globalMaxWait / 1000) * 10) / 10);
+      const avgActive = sumActiveCars > 0 ? (sumActiveWait / sumActiveCars) : 0;
+      
+      setAvgWaitActive(Math.round(avgActive * 10) / 10);
+      setTMax(Math.round(maxActiveWait * 10) / 10);
+      setCityPainIndex(Math.round(avgActive * 10) / 10); // fallback legacy
     };
-    TransferBus.addEventListener('pain_report', handlePainReport);
 
     const handleVisionSensor = (e: any) => {
       const { targetNodeId, direction, count, density, hasAmbulance } = e.detail;
@@ -143,6 +171,10 @@ export function TrafficProvider({ children }: { children: ReactNode }) {
         hasAmbulance: hasAmbulance
       });
     };
+
+    TransferBus.addEventListener('transfer', handleTransfer);
+    TransferBus.addEventListener('vehicle_completed', handleCompleted);
+    TransferBus.addEventListener('pain_report', handlePainReport);
     TransferBus.addEventListener('vision_sensor', handleVisionSensor);
 
     return () => {
@@ -153,20 +185,20 @@ export function TrafficProvider({ children }: { children: ReactNode }) {
     }
   }, [sendTopologyUpdate]);
 
-  const cityPainRef = useRef(0);
+  const avgWaitActiveRef = useRef(0);
   const throughputRef = useRef(0);
   useEffect(() => {
-    cityPainRef.current = cityPainIndex;
+    avgWaitActiveRef.current = avgWaitActive;
     throughputRef.current = totalCarsFinished;
-  }, [cityPainIndex, totalCarsFinished]);
+  }, [avgWaitActive, totalCarsFinished]);
 
   useEffect(() => {
     const interval = setInterval(() => {
       setMetricsHistory(prev => {
-        const totalPain = Math.round(cityPainRef.current);
+        const avgActive = Math.round(avgWaitActiveRef.current);
         const newHist = [...prev, {
           time: new Date().toLocaleTimeString(),
-          pain: totalPain,
+          pain: avgActive,
           throughput: throughputRef.current
         }];
         if (newHist.length > 30) return newHist.slice(newHist.length - 30);
@@ -181,7 +213,9 @@ export function TrafficProvider({ children }: { children: ReactNode }) {
       nodes, setNodes, onNodesChange,
       edges, setEdges, onEdgesChange, onConnect,
       isSpawnMode, setIsSpawnMode,
-      cityPainIndex, avgWaitCompleted, maxWaitActive, totalCarsFinished, metricsHistory,
+      cityPainIndex, totalCarsFinished,
+      avgWaitCompleted, avgWaitActive, tMax, throughput,
+      metricsHistory,
       realtimeNodes, history, connected, eventLogs, sendTopologyUpdate
     }}>
       {children}
