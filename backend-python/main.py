@@ -47,6 +47,12 @@ def node_simulator(node_id):
             if sim_running:
                 signal.process()
                 signal.action_doer()
+                # Broadcast local state features to neighbors in memory
+                local_features = signal.get_local_features()
+                with nodes_lock:
+                    for direction, neighbor_id in list(signal.neighbor_map.items()):
+                        if neighbor_id in nodes:
+                            nodes[neighbor_id].update_neighbor_feature(node_id, local_features)
             
             state = signal.get_state()
             logs = signal.pop_logs()
@@ -137,8 +143,10 @@ def process_topology_message(ch, method, properties, body):
                 
                 if src in nodes:
                     nodes[src].add_connection(src_dir)
+                    nodes[src].neighbor_map[src_dir] = tgt
                 if tgt in nodes:
                     nodes[tgt].add_connection(tgt_dir)
+                    nodes[tgt].neighbor_map[tgt_dir] = src
                 
             elif msg_type == "add_vehicle":
                 v_type = msg.get("vehicleType")

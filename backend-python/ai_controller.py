@@ -1,189 +1,161 @@
 import random
+import numpy as np
 
 class AIController:
     """
-    True Q-Learning Engine with full Phase Selection autonomy.
-    The AI controls BOTH which direction gets the green light AND how long.
-    State: (ActiveDensityLevel, MaxCrossDensityLevel)
-    Action: duration_seconds (phase direction is now selected by urgency score)
+    Decentralized Graph Attention Network (GAT) AI Controller.
+    Uses Message-Passing representation learning to coordinate with neighbors.
+    Approximates action Q-values (0: Keep, 1: Switch) using linear TD-learning.
     """
-    
     def __init__(self):
-        # Seeded initial durations mapping (ActiveDensity, CrossDensity) -> Duration
-        seeded_durations = {
-            # Emergency overrides
-            ('E', 'E'): 15, ('E', 'H'): 30, ('E', 'M'): 30, ('E', 'L'): 30,
-            ('H', 'E'): 5,  ('M', 'E'): 5,  ('L', 'E'): 5,
-            
-            # Standard traffic flow
-            ('H', 'H'): 15, ('H', 'M'): 20, ('H', 'L'): 30,
-            ('M', 'H'): 10, ('M', 'M'): 15, ('M', 'L'): 20,
-            ('L', 'H'): 5,  ('L', 'M'): 10, ('L', 'L'): 10,
+        # Set random seeds for consistent baseline initialization
+        np.random.seed(42)
+        
+        # Dimensions
+        self.feat_dim = 8     # 4 queues + 4 green-light status values
+        self.hidden_dim = 8   # GAT hidden feature state size
+        
+        # GAT Model Weights
+        self.W_k = np.random.randn(self.hidden_dim, self.feat_dim) * 0.1  # Local weight
+        self.W_n = np.random.randn(self.hidden_dim, self.feat_dim) * 0.1  # Neighbor weight
+        self.W_a = np.random.randn(self.hidden_dim, self.feat_dim) * 0.1  # Attention projection
+        self.V = np.random.randn(self.hidden_dim * 2) * 0.1              # Attention vector
+        
+        # Policy Network Linear Q-Approximator: Q(h_i, a) = Theta[a]^T * h_i
+        self.Theta = {
+            0: np.random.randn(self.hidden_dim) * 0.1,  # Keep action weights
+            1: np.random.randn(self.hidden_dim) * 0.1   # Switch action weights
         }
         
-        self.durations = [5, 10, 15, 20, 30]
-        self.q_table = {}
+        # RL Hyperparameters
+        self.alpha = 0.05   # Learning rate
+        self.gamma = 0.9    # Discount factor
+        self.epsilon = 0.1  # Exploration rate
         
-        # Initialize and seed Q-table: Q((active_density, cross_density), duration)
-        states = ['E', 'H', 'M', 'L']
-        for a_state in states:
-            for c_state in states:
-                optimal_dur = seeded_durations.get((a_state, c_state), 10)
-                for dur in self.durations:
-                    self.q_table[((a_state, c_state), dur)] = 100.0 if dur == optimal_dur else 0.0
-
-        self.alpha = 0.5   # High learning rate for fast convergence
-        self.gamma = 0.9   # Discount factor
-        self.epsilon = 0.1 # Exploration rate
-        self.last_state = None
+        # Memory buffers for Temporal Difference learning updates
+        self.last_h = None
         self.last_action = None
         self.last_q_value = 0.0
         self.last_loss = 0.0
 
-    def _discretize(self, lane_data):
-        """Converts raw density into a categorical state for the Q-Table."""
-        if lane_data.get('ambulance', False):
-            return 'E'
-        density = lane_data.get('density', 0.0)
-        if density > 0.7:
-            return 'H'
-        elif density > 0.3:
-            return 'M'
-        return 'L'
-
-    def _score_direction(self, direction, all_telemetry):
+    def run_gat(self, local_features, neighbor_features):
         """
-        Scores a direction urgency using exponential scaling so larger queues
-        dominate decisively over smaller ones. A 15-car lane will score much
-        higher than a 7-car lane, making starvation cases rare.
+        Runs Graph Attention convolution forward pass to calculate hidden state h_i.
+        local_features: List of length 8 [q_N, q_S, q_E, q_W, p_N, p_S, p_E, p_W]
+        neighbor_features: List of neighbor feature lists (each of length 8)
         """
-        lane_data = all_telemetry.get(direction, {})
-        state = self._discretize(lane_data)
-        car_count = lane_data.get('car_count', 0)
-        density = lane_data.get('density', 0.0)
-        if state == 'E':
-            return 10000.0  # Ambulance always wins absolutely
-        # Exponential: car_count^1.5 means 15 cars -> 58.1, 7 cars -> 18.5
-        # Gap between 15 and 7 is 3x, not 2x like linear scoring.
-        return (car_count ** 1.5) + (density * 20)
-
-    def select_next_phase(self, active_phases, all_telemetry, incoming_by_dir=None, incoming_count=0):
-        """
-        PHASE SELECTION: AI selects which direction should go green next
-        based on urgency, AND chooses the optimal duration via Q-table.
-        incoming_by_dir: dict {'N': count, 'S': count, ...} per-direction platoon alerts.
-        Returns (chosen_direction, optimal_duration).
-        """
-        if not active_phases or not all_telemetry:
-            return (active_phases[0] if active_phases else None), 10
-
-        if incoming_by_dir is None:
-            incoming_by_dir = {}
-
-        scored = []
-        for d in active_phases:
-            base_score = self._score_direction(d, all_telemetry)
-            # Incoming bonus is capped at 50% of a full-lane score (100) so it
-            # can never beat a direction that already has real heavy traffic.
-            dir_incoming = incoming_by_dir.get(d, 0)
-            incoming_bonus = min(dir_incoming * 3, 50) if dir_incoming > 3 else 0
-            scored.append((base_score + incoming_bonus, d))
-
-        scored.sort(reverse=True)
-
-        # Epsilon-greedy phase selection
-        if random.random() < self.epsilon:
-            chosen_dir = random.choice(active_phases)
-        else:
-            chosen_dir = scored[0][1]
-
-        # Determine optimal duration for chosen direction
-        active_state = self._discretize(all_telemetry.get(chosen_dir, {}))
-        cross_states = [self._discretize(all_telemetry.get(d, {})) for d in active_phases if d != chosen_dir]
-        cross_state = 'L'
-        for p in ['E', 'H', 'M', 'L']:
-            if p in cross_states:
-                cross_state = p
-                break
-
-        state = (active_state, cross_state)
-
-        # Epsilon-greedy duration selection
-        if random.random() < self.epsilon:
-            duration = random.choice(self.durations)
-        else:
-            q_values = {dur: self.q_table.get((state, dur), 0.0) for dur in self.durations}
-            duration = max(q_values, key=q_values.get)
-
-        # Dynamic floor based on cross-traffic density to balance clearing vs starvation:
-        active_car_count = all_telemetry.get(chosen_dir, {}).get('car_count', 0)
-        base_floor = min(30, max(5, active_car_count))
+        x_i = np.array(local_features, dtype=np.float32)
+        proj_i = np.dot(self.W_k, x_i)
         
-        if cross_state == 'E':
-            # Emergency waiting cross-side, yield immediately
-            min_floor = 5
-        elif cross_state == 'H':
-            # Heavy cross traffic, clear at least half of the active queue (car_count // 2)
-            min_floor = max(5, int(base_floor * 0.5))
-        elif cross_state == 'M':
-            # Medium cross traffic, clear at least 75% of the active queue (car_count * 0.75)
-            min_floor = max(5, int(base_floor * 0.75))
+        if not neighbor_features:
+            # Boundary nodes with no neighbors do local aggregation only
+            return np.maximum(0.0, proj_i)
+            
+        proj_neighbors = []
+        attn_scores = []
+        
+        # Compute projection query and keys for target node i
+        q_i = np.dot(self.W_a, x_i)
+        
+        for x_j in neighbor_features:
+            x_j_arr = np.array(x_j, dtype=np.float32)
+            proj_j = np.dot(self.W_n, x_j_arr)
+            proj_neighbors.append(proj_j)
+            
+            # Key projection
+            k_j = np.dot(self.W_a, x_j_arr)
+            
+            # Concatenate query and key features
+            concat_feat = np.concatenate([q_i, k_j])
+            
+            # Raw attention coeff with LeakyReLU activation
+            e_ij = np.dot(self.V, concat_feat)
+            e_ij = e_ij if e_ij > 0.0 else e_ij * 0.2
+            attn_scores.append(e_ij)
+            
+        # Softmax over neighbor attention coefficients
+        attn_scores = np.array(attn_scores, dtype=np.float32)
+        exp_scores = np.exp(attn_scores - np.max(attn_scores))  # Numerical stability
+        alpha = exp_scores / np.sum(exp_scores)
+        
+        # Aggregate neighbor states
+        agg_neighbors = np.zeros(self.hidden_dim, dtype=np.float32)
+        for idx, proj_j in enumerate(proj_neighbors):
+            agg_neighbors += alpha[idx] * proj_j
+            
+        # Relu activation on aggregated Graph Features
+        h_i = np.maximum(0.0, proj_i + agg_neighbors)
+        return h_i
+
+    def select_action(self, h_i):
+        """
+        Selects Keep (0) or Switch (1) based on GAT hidden vector h_i.
+        Uses epsilon-greedy exploration.
+        """
+        # Q(h_i, a) = Theta[a] . h_i
+        q_values = {
+            0: float(np.dot(h_i, self.Theta[0])),
+            1: float(np.dot(h_i, self.Theta[1]))
+        }
+        
+        if random.random() < self.epsilon:
+            action = random.choice([0, 1])
         else:
-            # Low cross traffic, fully clear the active queue (100%)
-            min_floor = base_floor
+            action = 0 if q_values[0] > q_values[1] else 1
+            
+        self.last_h = h_i
+        self.last_action = action
+        self.last_q_value = q_values[action]
+        
+        return action
 
-        duration = max(duration, min_floor)
-
-        self.last_state = state
-        self.last_action = duration
-        self.last_q_value = self.q_table.get((state, duration), 0.0)
-
-        return chosen_dir, duration
-
-    def update_q_value(self, reward):
-        """Updates the Q-table based on the reward from the LAST action taken."""
-        if not self.last_state or not self.last_action:
+    def update_policy(self, reward, next_h_i):
+        """
+        Updates the approximator weights (Theta) using Temporal Difference Q-learning.
+        """
+        if self.last_h is None or self.last_action is None:
             return
-        state = self.last_state
-        action = self.last_action
-        old_q = self.q_table.get((state, action), 0.0)
-        new_q = old_q + self.alpha * (reward - old_q)
-        self.q_table[(state, action)] = new_q
-        self.last_loss = reward - old_q
+            
+        # Compute max Q-value of the next state
+        q_next = {
+            0: float(np.dot(next_h_i, self.Theta[0])),
+            1: float(np.dot(next_h_i, self.Theta[1]))
+        }
+        max_q_next = max(q_next.values())
+        
+        # Bellman Target
+        target = reward + self.gamma * max_q_next
+        td_error = target - self.last_q_value
+        
+        # Policy gradient update on weights
+        self.Theta[self.last_action] += self.alpha * td_error * self.last_h
+        
+        # Record squared TD error as loss metrics
+        self.last_loss = float(td_error ** 2)
 
     def get_optimal_duration(self, active_direction, all_telemetry, incoming_count=0):
-        """Backward compat shim for STATIC mode."""
-        _, duration = self.select_next_phase([active_direction], all_telemetry, incoming_count=incoming_count)
-        return duration
+        """Backward compat shim for legacy STATIC calls."""
+        return 15
 
 # =====================================================================
 # MODULAR AGENT ENTRANCE (MODIFIABLE ACTION ZONE)
 # =====================================================================
 
-def run_agent_decision(controller, active_phases, cv_telemetry, incoming_by_dir):
+def run_agent_decision(controller, local_features, neighbor_features):
     """
     MODULAR AGENT ACTION FUNCTION
-    Processes intersection status and determines phase selection & duration.
-    
-    Inputs:
-        - controller: AIController instance containing persistent model state (like Q-tables)
-        - active_phases: List of connected directions (e.g. ['N', 'S', 'E', 'W'])
-        - cv_telemetry: Dict containing count, density, and ambulance flags per lane
-        - incoming_by_dir: Dict of incoming platoon counts per lane
-        
-    Returns:
-        - chosen_dir: String lane to set Green next (e.g. 'N')
-        - duration: Integer duration to run the Green phase
+    Runs GAT message aggregation and returns action 0 (Keep) or 1 (Switch).
     """
     # # your code goes here
-    chosen_dir, duration = controller.select_next_phase(active_phases, cv_telemetry, incoming_by_dir)
-    return chosen_dir, duration
+    h_i = controller.run_gat(local_features, neighbor_features)
+    action = controller.select_action(h_i)
+    return action
 
-def update_agent_rewards(controller, reward):
+def update_agent_rewards(controller, reward, next_local_features, next_neighbor_features):
     """
     MODULAR REWARD / LOSS UPDATE FUNCTION
-    Executes training adjustments on the model at the end of each phase.
+    Calculates next state features and performs TD-gradient step.
     """
     # # your code goes here
-    controller.update_q_value(reward)
-
+    next_h_i = controller.run_gat(next_local_features, next_neighbor_features)
+    controller.update_policy(reward, next_h_i)
