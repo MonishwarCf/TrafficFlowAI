@@ -149,8 +149,8 @@ export default function VehicleEdge({
       lastTime = time;
 
       // Normalize delta time to 60fps (1.0 = 16.67ms)
-      // Cap at 30.0 for 10x simulation acceleration (10s in sim = 1s real time)
-      const dt = Math.min(30.0, (rawDt / 16.67) * 10);
+      // Cap at 3.0 to prevent physics teleportation (visual movement runs at 1x real-time speed)
+      const dt = Math.min(3.0, rawDt / 16.67);
 
       const totalLength = path.getTotalLength() || 100;
 
