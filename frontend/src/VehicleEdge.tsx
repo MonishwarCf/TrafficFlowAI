@@ -34,7 +34,10 @@ export function getLaneTelemetry(vehicles: Vehicle[], dir: 1 | -1, totalLength: 
     return distToEnd >= 0 && distToEnd < 180;
   });
 
-  return { count, density, hasAmbulance };
+  const totalWaitTime = laneVehicles.reduce((sum, v) => sum + (v.totalWaitTime / 1000), 0);
+  const maxWait = laneVehicles.length > 0 ? Math.max(...laneVehicles.map(v => v.totalWaitTime / 1000)) : 0;
+
+  return { count, density, hasAmbulance, totalWaitTime, maxWait };
 }
 
 export default function VehicleEdge({
@@ -94,7 +97,7 @@ export default function VehicleEdge({
           targetNode: direction === 1 ? targetNodeId : sourceNodeId,
           distance: -20 - Math.floor(i/2) * 35,
           color: isAmb ? '#ff0000' : `hsl(${Math.random() * 360}, 100%, 60%)`,
-          speed: isAmb ? 2 : (1 + Math.random() * 1),
+          speed: isAmb ? 1.0 : (0.4 + Math.random() * 0.4),
           stopped: false,
           direction,
           startTime: Date.now(),
@@ -146,8 +149,8 @@ export default function VehicleEdge({
       lastTime = time;
 
       // Normalize delta time to 60fps (1.0 = 16.67ms)
-      // Cap at 3.0 to prevent physics teleportation when switching tabs
-      const dt = Math.min(3.0, rawDt / 16.67);
+      // Cap at 30.0 for 10x simulation acceleration (10s in sim = 1s real time)
+      const dt = Math.min(30.0, (rawDt / 16.67) * 10);
 
       const totalLength = path.getTotalLength() || 100;
 
@@ -185,7 +188,7 @@ export default function VehicleEdge({
         if (!stopped) {
           car.distance += car.speed * dt;
         } else {
-          car.totalWaitTime += rawDt;
+          car.totalWaitTime += rawDt * 10;
         }
       }
 
