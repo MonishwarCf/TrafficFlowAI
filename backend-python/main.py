@@ -144,15 +144,7 @@ def process_topology_message(ch, method, properties, body):
                 v_type = msg.get("vehicleType")
                 tgt = msg.get("targetNode")
                 if v_type == "Ambulance":
-                    print(f"AMBULANCE detected heading to {tgt}. Forcing green lights!")
-                    # Force target and its neighbors to green
-                    targets = set([tgt])
-                    if tgt in edges:
-                        targets.update(edges[tgt])
-                    
-                    for t in targets:
-                        if t in nodes:
-                            nodes[t].set_override("Green", 5) # force green for next 5 ticks
+                    print(f"AMBULANCE spawned heading to {tgt}. JIT proximity tracking active.")
             elif msg_type == "set_mode":
                 global_operating_mode = msg.get("mode")
                 for n_id, signal in nodes.items():
