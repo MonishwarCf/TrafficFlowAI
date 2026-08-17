@@ -21,7 +21,9 @@ class HeuristicController:
         for d in active_phases:
             car_count = cv_telemetry.get(d, {}).get('car_count', 0)
             starvation = self.starvation_timers.get(d, 0)
-            scores[d] = (car_count * 10) + (starvation * 2)
+            ambulance = cv_telemetry.get(d, {}).get('ambulance', False)
+            amb_weight = 200 if ambulance else 0
+            scores[d] = (car_count * 10) + (starvation * 2) + amb_weight
 
         # Select phase with highest score
         chosen_dir = max(scores, key=scores.get)

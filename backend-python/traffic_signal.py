@@ -113,21 +113,7 @@ class TrafficSignal:
                         self.ai_phase_timer = 0
                     return # skip GAT action while yellow
 
-                # Check for ambulance override preemption (Priority Action Masking)
-                ambulance_dir = None
-                for d in self.active_phases:
-                    if self.cv_telemetry.get(d, {}).get('ambulance', False):
-                        ambulance_dir = d
-                        break
-
-                # If an ambulance is detected, immediately override and bypass the GAT policy
-                if ambulance_dir is not None:
-                    active_dir = self.active_phases[self.current_phase_index]
-                    if active_dir != ambulance_dir:
-                        self.current_phase_index = self.active_phases.index(ambulance_dir)
-                        self.logs.append(f"AI Preemption Override: Ambulance detected on {ambulance_dir}! Switched Green.")
-                    self.ai_phase_timer = 0 # reset timer during preemption
-                    return
+                # Ambulance override preemption removed here; handled gracefully via +200 penalty score in HeuristicController.
 
                 # Idle Node Bypass: if intersection is empty, hold lights without GAT convolutions
                 total_cars = sum(data.get('car_count', 0) for data in self.cv_telemetry.values())
@@ -222,6 +208,9 @@ class TrafficSignal:
                 elif self.operating_mode == 'AI':
                     remaining = self.ai_phase_duration - self.ai_phase_timer
             
+            total_cars = sum(data.get('car_count', 0) for data in self.cv_telemetry.values())
+            proactive_alert = total_cars > 30
+            
             return {
                 'node_id': self.node_id,
                 'light': self.light_state.copy(),
@@ -232,6 +221,7 @@ class TrafficSignal:
                 'mode': self.operating_mode,
                 'cv_telemetry': self.cv_telemetry.copy(),
                 'remaining_time': remaining,
+                'proactive_alert': proactive_alert,
                 'ai_action': self.ai.last_action if self.operating_mode == 'AI' else None,
                 'ai_reward': self.ai.last_loss if self.operating_mode == 'AI' else None
             }

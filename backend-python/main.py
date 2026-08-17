@@ -57,6 +57,16 @@ def node_simulator(node_id):
             state = signal.get_state()
             logs = signal.pop_logs()
             
+            if state.get('proactive_alert'):
+                total_c = sum(data.get('car_count', 0) for data in state.get('cv_telemetry', {}).values())
+                with nodes_lock:
+                    for direction, neighbor_id in list(signal.neighbor_map.items()):
+                        if neighbor_id in nodes:
+                            tgt_dir = {'N': 'S', 'S': 'N', 'E': 'W', 'W': 'E'}.get(direction, 'N')
+                            nodes[neighbor_id].add_incoming(tgt_dir, total_c)
+                            print(f"PROACTIVE ALERT: Node {node_id} warning {neighbor_id} of massive queue ({total_c})!")
+            
+            
             message = {
                 'type': 'LIGHT_UPDATE',
                 'node': node_id,
