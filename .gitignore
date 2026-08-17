@@ -9,3 +9,6 @@ __pycache__/
 *.log
 *.jsonl
 myenv/
+*.pptx
+*.ppt
+*.mp4
