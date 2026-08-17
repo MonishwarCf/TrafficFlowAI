@@ -137,12 +137,13 @@ class TrafficSignal:
 
                 self.ai_phase_timer += 1
 
-                # Fixed-step decision interval (10s)
+                # Dynamic decision interval
                 if self.ai_phase_timer >= self.ai_phase_duration:
                     self.ai_phase_timer = 0
                     
                     # 1. Heuristic Scoring & Action Selection
-                    chosen_dir = run_agent_decision(self.ai, self.cv_telemetry, self.active_phases)
+                    chosen_dir, optimal_duration = run_agent_decision(self.ai, self.cv_telemetry, self.active_phases)
+                    self.ai_phase_duration = optimal_duration
                     
                     # 2. Execute Decision
                     active_dir = self.active_phases[self.current_phase_index]

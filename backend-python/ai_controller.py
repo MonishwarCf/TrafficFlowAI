@@ -26,6 +26,10 @@ class HeuristicController:
         # Select phase with highest score
         chosen_dir = max(scores, key=scores.get)
 
+        # Dynamic Proportional Time
+        winning_car_count = cv_telemetry.get(chosen_dir, {}).get('car_count', 0)
+        optimal_duration = min(20.0, 5.0 + (winning_car_count * 0.75))
+
         # Update starvation timers: reset for chosen, increment for ignored active phases
         for d in self.starvation_timers:
             if d in active_phases:
@@ -39,7 +43,7 @@ class HeuristicController:
         self.last_action = chosen_dir
         self.last_loss = float(scores[chosen_dir]) # Display the winning score instead of loss
         
-        return chosen_dir
+        return chosen_dir, optimal_duration
 
 # =====================================================================
 # MODULAR AGENT ENTRANCE (MODIFIABLE ACTION ZONE)
@@ -48,10 +52,10 @@ class HeuristicController:
 def run_agent_decision(controller, cv_telemetry, active_phases):
     """
     MODULAR AGENT ACTION FUNCTION
-    Runs heuristic scoring and returns the chosen phase direction (e.g. 'N', 'S').
+    Runs heuristic scoring and returns the chosen phase direction and optimal duration.
     """
-    chosen_dir = controller.select_action(cv_telemetry, active_phases)
-    return chosen_dir
+    chosen_dir, optimal_duration = controller.select_action(cv_telemetry, active_phases)
+    return chosen_dir, optimal_duration
 
 def update_agent_rewards(controller, reward, next_local_features, next_neighbor_features, next_active_phases):
     """

@@ -219,9 +219,7 @@ export default function VehicleEdge({
         for (let i = 0; i < vehiclesRef.current.length; i++) {
           if (vehiclesRef.current[i].stopped) {
             stoppedCount++;
-            // SIM TIME SCALING: multiply physical wait time by 5 so the simulation 
-            // values mirror real-world intersection wait times (e.g. 60-120 seconds).
-            const waitSec = (vehiclesRef.current[i].totalWaitTime / 1000) * 5;
+            const waitSec = vehiclesRef.current[i].totalWaitTime / 1000;
             edgeTotalWait += waitSec;
             if (waitSec > edgeMaxWait) {
               edgeMaxWait = waitSec;

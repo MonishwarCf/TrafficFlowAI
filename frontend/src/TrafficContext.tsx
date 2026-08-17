@@ -130,7 +130,7 @@ export function TrafficProvider({ children }: { children: ReactNode }) {
         const q = durationSec > 0 ? (nextTotal / durationSec) * 60 : 0;
         setThroughput(Math.round(q * 10) / 10);
         
-        const avgCompleted = completedWaitSecRef.current / nextTotal;
+        const avgCompleted = (completedWaitSecRef.current * 5) / nextTotal;
         setAvgWaitCompleted(Math.round(avgCompleted * 10) / 10);
         
         return nextTotal;
@@ -155,9 +155,9 @@ export function TrafficProvider({ children }: { children: ReactNode }) {
       
       const avgActive = sumActiveCars > 0 ? (sumActiveWait / sumActiveCars) : 0;
       
-      setAvgWaitActive(Math.round(avgActive * 10) / 10);
-      setTMax(Math.round(maxActiveWait * 10) / 10);
-      setCityPainIndex(Math.round(avgActive * 10) / 10); // fallback legacy
+      setAvgWaitActive(Math.round(avgActive * 5 * 10) / 10);
+      setTMax(Math.round(maxActiveWait * 5 * 10) / 10);
+      setCityPainIndex(Math.round(avgActive * 5 * 10) / 10); // fallback legacy
     };
 
     const handleVisionSensor = (e: any) => {
@@ -195,7 +195,7 @@ export function TrafficProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const interval = setInterval(() => {
       setMetricsHistory(prev => {
-        const avgActive = Math.round(avgWaitActiveRef.current);
+        const avgActive = avgWaitActiveRef.current;
         const newHist = [...prev, {
           time: new Date().toLocaleTimeString(),
           pain: avgActive,

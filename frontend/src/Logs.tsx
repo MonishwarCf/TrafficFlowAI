@@ -14,7 +14,7 @@ export default function Logs() {
   const selectedNodeData = selectedNode ? realtimeNodes[selectedNode] : null;
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#121212', color: 'white' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#121212', color: 'white', overflowY: 'auto' }}>
       <header style={{ padding: '15px 30px', backgroundColor: '#1a1a1a', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #333' }}>
         <h2 style={{ margin: 0, color: '#03a9f4' }}>Debug & System Logs</h2>
         <div>
@@ -119,6 +119,20 @@ export default function Logs() {
           ) : (
             <p style={{ color: '#666' }}>Select a node to inspect its variables.</p>
           )}
+            <div style={{ marginTop: '20px', padding: '20px', backgroundColor: '#1a1a1a', borderRadius: '6px', border: '1px solid #333' }}>
+              <h3 style={{ margin: '0 0 15px 0', color: '#ffb300' }}>Live Computer Vision Feed</h3>
+              <div style={{ width: '100%', height: '300px', backgroundColor: '#000', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
+                <img 
+                  src="http://localhost:5001/video_feed" 
+                  alt="TrafficCV Live Feed" 
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              </div>
+              <p style={{ color: '#888', fontSize: '12px', marginTop: '10px' }}>CV Model: SSD MobileNet v1 (TFLite)</p>
+            </div>
         </div>
       </div>
     </div>
