@@ -82,22 +82,7 @@ function App() {
           </ResponsiveContainer>
         </div>
 
-        <div style={{ flex: 1, borderLeft: '1px solid #eee', paddingLeft: '20px' }}>
-          <h2 style={{ textAlign: 'center', marginBottom: '5px' }}>Live Performance Metrics</h2>
-          <div style={{ textAlign: 'center', marginBottom: '15px' }}>
-            <span style={{ fontSize: '14px', color: '#666' }}>Avg Active Wait: <strong style={{ color: '#ff9800' }}>{cityPainIndex}s</strong></span>
-          </div>
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={metricsHistory}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-              <XAxis dataKey="time" stroke="#666" tick={{fontSize: 10}} />
-              <YAxis stroke="#ff9800" width={40} domain={[0, 'auto']} />
-              <Tooltip />
-              <Legend />
-              <Line type="monotone" dataKey="pain" stroke="#ff9800" name="Avg Active Wait (s)" dot={false} strokeWidth={2} isAnimationActive={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+
 
       </div>
     </div>
