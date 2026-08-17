@@ -1,0 +1,23 @@
+# TrafficFlow & MONUCV AI Combined Dependencies
+
+# Backend (FastAPI, RabbitMQ)
+fastapi
+uvicorn
+pika
+python-dotenv
+numpy
+
+# MONUCV (TrafficCV) Dependencies
+scipy
+scikit-image
+gast>=0.4.0
+tensorflow-cpu>=2.13.0,<2.16.0
+opencv-python>=4.4.0
+pyfiglet
+imutils
+json_minify
+psutil
+
+# Additional packages for the MJPEG CV Server integration
+flask
+flask-cors
