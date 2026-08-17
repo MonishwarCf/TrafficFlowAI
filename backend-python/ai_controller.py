@@ -9,11 +9,12 @@ class HeuristicController:
         self.last_action = None
         self.last_loss = 0.0 # Kept for backward compatibility with frontend metrics
 
-    def select_action(self, cv_telemetry, active_phases):
+    def select_action(self, cv_telemetry, active_phases, incoming=None):
         """
         Calculates a priority score for each active phase.
         Score = (Queue Length * 10) + (Starvation Cycles * 2)
         """
+        if incoming is None: incoming = {}
         if not active_phases:
             return None
 
@@ -23,7 +24,19 @@ class HeuristicController:
             starvation = self.starvation_timers.get(d, 0)
             ambulance = cv_telemetry.get(d, {}).get('ambulance', False)
             amb_weight = 200 if ambulance else 0
-            scores[d] = (car_count * 10) + (starvation * 2) + amb_weight
+            
+            # Base score
+            score = (car_count * 10) + (starvation * 2) + amb_weight
+            
+            # Proactive Clear-Out Logic
+            # If there is a massive incoming platoon (>30) on a DIFFERENT direction,
+            # we aggressively clear out this local lane if it has cars waiting.
+            if car_count > 0:
+                for inc_dir, inc_count in incoming.items():
+                    if inc_count > 30 and inc_dir != d:
+                        score += 100 # Aggressive boost to clear cross-traffic
+            
+            scores[d] = score
 
         # Select phase with highest score
         chosen_dir = max(scores, key=scores.get)
@@ -51,12 +64,12 @@ class HeuristicController:
 # MODULAR AGENT ENTRANCE (MODIFIABLE ACTION ZONE)
 # =====================================================================
 
-def run_agent_decision(controller, cv_telemetry, active_phases):
+def run_agent_decision(controller, cv_telemetry, active_phases, incoming):
     """
     MODULAR AGENT ACTION FUNCTION
     Runs heuristic scoring and returns the chosen phase direction and optimal duration.
     """
-    chosen_dir, optimal_duration = controller.select_action(cv_telemetry, active_phases)
+    chosen_dir, optimal_duration = controller.select_action(cv_telemetry, active_phases, incoming)
     return chosen_dir, optimal_duration
 
 def update_agent_rewards(controller, reward, next_local_features, next_neighbor_features, next_active_phases):

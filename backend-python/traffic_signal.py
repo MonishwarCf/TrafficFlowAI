@@ -85,6 +85,11 @@ class TrafficSignal:
 
             if not self.active_phases:
                 return
+                
+            # Decay incoming platoon alerts so they don't remain stuck infinitely
+            for d in self.incoming:
+                if self.incoming[d] > 0:
+                    self.incoming[d] = max(0, self.incoming[d] - 1)
 
             if self.operating_mode == 'STATIC':
                 if self.yellow_timer > 0:
@@ -128,7 +133,7 @@ class TrafficSignal:
                     self.ai_phase_timer = 0
                     
                     # 1. Heuristic Scoring & Action Selection
-                    chosen_dir, optimal_duration = run_agent_decision(self.ai, self.cv_telemetry, self.active_phases)
+                    chosen_dir, optimal_duration = run_agent_decision(self.ai, self.cv_telemetry, self.active_phases, self.incoming)
                     self.ai_phase_duration = optimal_duration
                     
                     # 2. Execute Decision
@@ -168,10 +173,10 @@ class TrafficSignal:
             self.density = density
 
     def add_incoming(self, direction, count):
-        """Records incoming platoon alert for a specific arrival direction."""
+        """Records incoming platoon alert for a specific arrival direction. Takes the max to prevent runaway sums."""
         with self.lock:
             if direction in self.incoming:
-                self.incoming[direction] += count
+                self.incoming[direction] = max(self.incoming[direction], count)
 
     def set_override(self, state, duration):
         with self.lock:
