@@ -1,4 +1,4 @@
-﻿node_modules/
+node_modules/
 target/
 venv/
 __pycache__/
@@ -7,4 +7,5 @@ __pycache__/
 .vscode/
 *.class
 *.log
-
+*.jsonl
+myenv/
