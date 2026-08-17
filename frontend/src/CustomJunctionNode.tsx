@@ -9,7 +9,11 @@ export default function CustomJunctionNode({ data }: { data: any }) {
   const lE = typeof light === 'object' ? light.E : 'Red';
   const lW = typeof light === 'object' ? light.W : 'Red';
 
-  const getColor = (state: string) => state === 'Green' ? '#4caf50' : '#f44336';
+  const getColor = (state: string) => {
+    if (state === 'Green') return '#4caf50';
+    if (state === 'Yellow') return '#ffc107';
+    return '#f44336'; // Red
+  };
 
   const density = data.density || 0;
   // Create a glowing box shadow based on density (0-20 scale usually in backend, but could be up to 100 on dashboard)

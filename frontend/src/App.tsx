@@ -74,7 +74,7 @@ function App() {
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="time" />
-              <YAxis domain={[0, 100]} />
+              <YAxis domain={[0, 60]} />
               <Tooltip />
               <Legend />
               <Line type="monotone" dataKey="density" stroke="#8884d8" activeDot={{ r: 8 }} name="Density (%)" />
@@ -85,18 +85,18 @@ function App() {
         <div style={{ flex: 1, borderLeft: '1px solid #eee', paddingLeft: '20px' }}>
           <h2 style={{ textAlign: 'center', marginBottom: '5px' }}>Live Performance Metrics</h2>
           <div style={{ textAlign: 'center', marginBottom: '15px' }}>
-            <span style={{ fontSize: '14px', color: '#666' }}>City Pain Index: <strong style={{ color: '#ff9800' }}>{Math.round(cityPainIndex)}</strong></span>
+            <span style={{ fontSize: '14px', color: '#666' }}>Avg Active Wait: <strong style={{ color: '#ff9800' }}>{Math.round(cityPainIndex)}s</strong></span>
             <span style={{ fontSize: '14px', color: '#666', marginLeft: '15px' }}>Throughput: <strong style={{ color: '#4caf50' }}>{totalCarsFinished}</strong></span>
           </div>
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={metricsHistory}>
               <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
               <XAxis dataKey="time" stroke="#666" tick={{fontSize: 10}} />
-              <YAxis yAxisId="left" stroke="#ff9800" width={40} />
-              <YAxis yAxisId="right" orientation="right" stroke="#4caf50" width={40} />
+              <YAxis yAxisId="left" stroke="#ff9800" width={40} domain={[0, (dataMax: number) => Math.max(dataMax, 20)]} />
+              <YAxis yAxisId="right" orientation="right" stroke="#4caf50" width={40} domain={[0, (dataMax: number) => Math.max(dataMax, 5)]} />
               <Tooltip />
               <Legend />
-              <Line yAxisId="left" type="monotone" dataKey="pain" stroke="#ff9800" name="Pain Index" dot={false} strokeWidth={2} isAnimationActive={false} />
+              <Line yAxisId="left" type="monotone" dataKey="pain" stroke="#ff9800" name="Avg Active Wait (s)" dot={false} strokeWidth={2} isAnimationActive={false} />
               <Line yAxisId="right" type="monotone" dataKey="throughput" stroke="#4caf50" name="Throughput" dot={false} strokeWidth={2} isAnimationActive={false} />
             </LineChart>
           </ResponsiveContainer>

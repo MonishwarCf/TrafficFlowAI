@@ -1,6 +1,6 @@
 import threading
 import time
-from ai_controller import AIController, run_agent_decision, update_agent_rewards
+from ai_controller import HeuristicController, run_agent_decision, update_agent_rewards
 
 class TrafficSignal:
     def __init__(self, node_id):
@@ -23,11 +23,15 @@ class TrafficSignal:
         self.override_time = 0
         self.logs = []
         
-        self.operating_mode = 'STATIC' # 'STATIC' or 'AI'
+        self.operating_mode = 'AI' # 'STATIC' or 'AI'
         
-        self.ai = AIController()
+        self.ai = HeuristicController()
         self.ai_phase_timer = 0
         self.ai_phase_duration = 10 # 10s decision interval (prevents micro-switching)
+        
+        self.yellow_timer = 0
+        self.yellow_phase = None
+        self.next_active_phase = None
         
         # Graph Message-Passing neighbors features state
         self.neighbor_map = {}       # direction -> connected_node_id
@@ -83,12 +87,32 @@ class TrafficSignal:
                 return
 
             if self.operating_mode == 'STATIC':
-                self.phase_timer += 1
-                if self.phase_timer >= self.phase_duration:
-                    self.phase_timer = 0
-                    self.current_phase_index = (self.current_phase_index + 1) % len(self.active_phases)
-                    self.logs.append(f"Static: Switched to {self.active_phases[self.current_phase_index]} for {self.phase_duration}s")
+                if self.yellow_timer > 0:
+                    self.yellow_timer -= 1
+                    if self.yellow_timer <= 0:
+                        self.current_phase_index = self.active_phases.index(self.next_active_phase)
+                        self.yellow_phase = None
+                        self.next_active_phase = None
+                        self.phase_timer = 0
+                else:
+                    self.phase_timer += 1
+                    if self.phase_timer >= self.phase_duration:
+                        next_idx = (self.current_phase_index + 1) % len(self.active_phases)
+                        self.next_active_phase = self.active_phases[next_idx]
+                        self.yellow_phase = self.active_phases[self.current_phase_index]
+                        self.yellow_timer = 3
+                        self.logs.append(f"Static: Switched to Yellow for 3s before {self.next_active_phase}")
             elif self.operating_mode == 'AI':
+                if self.yellow_timer > 0:
+                    self.yellow_timer -= 1
+                    if self.yellow_timer <= 0:
+                        if self.next_active_phase in self.active_phases:
+                            self.current_phase_index = self.active_phases.index(self.next_active_phase)
+                        self.yellow_phase = None
+                        self.next_active_phase = None
+                        self.ai_phase_timer = 0
+                    return # skip GAT action while yellow
+
                 # Check for ambulance override preemption (Priority Action Masking)
                 ambulance_dir = None
                 for d in self.active_phases:
@@ -117,24 +141,19 @@ class TrafficSignal:
                 if self.ai_phase_timer >= self.ai_phase_duration:
                     self.ai_phase_timer = 0
                     
-                    # 1. GAT Feature Convolutions & Action Selection
-                    local_feats = self.get_local_features()
-                    neighbor_feats = list(self.neighbor_features.values())
-                    chosen_dir = run_agent_decision(self.ai, local_feats, neighbor_feats, self.active_phases)
+                    # 1. Heuristic Scoring & Action Selection
+                    chosen_dir = run_agent_decision(self.ai, self.cv_telemetry, self.active_phases)
                     
                     # 2. Execute Decision
-                    if chosen_dir in self.active_phases:
-                        self.current_phase_index = self.active_phases.index(chosen_dir)
+                    active_dir = self.active_phases[self.current_phase_index]
+                    if chosen_dir in self.active_phases and chosen_dir != active_dir:
+                        # Switch to Yellow state before actually changing Green
+                        self.yellow_phase = active_dir
+                        self.next_active_phase = chosen_dir
+                        self.yellow_timer = 3
+                        self.logs.append(f"AI: Switching to Yellow for 3s before {chosen_dir}")
 
-                    # 3. Calculate Reward: stopped wait time penalty + queue length penalty (beta = 0.5)
-                    reward = -(total_cars + 0.5 * total_cars)
-                    
-                    next_local = self.get_local_features()
-                    next_neighbor = list(self.neighbor_features.values())
-                    
-                    # TD Learning Step
-                    update_agent_rewards(self.ai, reward, next_local, next_neighbor, self.active_phases)
-                    self.logs.append(f"AI: Selected phase {chosen_dir} (reward={reward})")
+                    self.logs.append(f"AI: Selected phase {chosen_dir} (score={self.ai.last_loss})")
 
     def action_doer(self):
         with self.lock:
@@ -151,7 +170,9 @@ class TrafficSignal:
                     self.light_state[d] = self.override
                 return
 
-            if self.active_phases:
+            if self.yellow_timer > 0 and self.yellow_phase:
+                self.light_state[self.yellow_phase] = 'Yellow'
+            elif self.active_phases:
                 active_dir = self.active_phases[self.current_phase_index]
                 self.light_state[active_dir] = 'Green'
 

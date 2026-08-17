@@ -23,8 +23,9 @@ export interface Vehicle {
  */
 export function getLaneTelemetry(vehicles: Vehicle[], dir: 1 | -1, totalLength: number, maxCapacity: number = 15) {
   const laneVehicles = vehicles.filter(v => v.direction === dir);
+  const stoppedVehicles = laneVehicles.filter(v => v.stopped);
 
-  const count = laneVehicles.length;
+  const count = stoppedVehicles.length;
   const density = Math.min(1.0, count / maxCapacity);
   
   // Just-In-Time preemption: Only trigger override green when ambulance is within 180 units of the junction
@@ -171,7 +172,7 @@ export default function VehicleEdge({
         if (isHeadingToExit) {
           if (distToNext < 5) stopped = true;
         } else {
-          if (distToEnd < 30 && lightAtEnd === 'Red') {
+          if (distToEnd < 30 && (lightAtEnd === 'Red' || lightAtEnd === 'Yellow')) {
             stopped = true;
           } else if (distToNext < 5) {
             stopped = true;
@@ -214,16 +215,22 @@ export default function VehicleEdge({
       if (time - lastReportTime > 500) {
         let edgeTotalWait = 0;
         let edgeMaxWait = 0;
+        let stoppedCount = 0;
         for (let i = 0; i < vehiclesRef.current.length; i++) {
-          const waitSec = vehiclesRef.current[i].totalWaitTime / 1000;
-          edgeTotalWait += waitSec;
-          if (waitSec > edgeMaxWait) {
-            edgeMaxWait = waitSec;
+          if (vehiclesRef.current[i].stopped) {
+            stoppedCount++;
+            // SIM TIME SCALING: multiply physical wait time by 5 so the simulation 
+            // values mirror real-world intersection wait times (e.g. 60-120 seconds).
+            const waitSec = (vehiclesRef.current[i].totalWaitTime / 1000) * 5;
+            edgeTotalWait += waitSec;
+            if (waitSec > edgeMaxWait) {
+              edgeMaxWait = waitSec;
+            }
           }
         }
 
         TransferBus.dispatchEvent(new CustomEvent('pain_report', { 
-            detail: { edgeId: id, totalWait: edgeTotalWait, maxWait: edgeMaxWait, carCount: vehiclesRef.current.length } 
+            detail: { edgeId: id, totalWait: edgeTotalWait, maxWait: edgeMaxWait, carCount: stoppedCount } 
         }));
 
         if (targetNodeId) {
