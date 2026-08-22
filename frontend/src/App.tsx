@@ -5,7 +5,7 @@ import { useTrafficContext } from './TrafficContext';
 import './App.css';
 
 function App() {
-  const { realtimeNodes: nodes, history, connected, metricsHistory, cityPainIndex } = useTrafficContext();
+  const { realtimeNodes: nodes, history, connected } = useTrafficContext();
 
   const getStatusColor = (status: string | undefined, light: string | Record<string, string> | undefined) => {
     let dominantLight = light;
