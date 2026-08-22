@@ -20,6 +20,7 @@ export default function Sandbox() {
     nodes, setNodes, onNodesChange, 
     edges, setEdges, onEdgesChange, onConnect,
     isSpawnMode, setIsSpawnMode,
+    globalMode, setGlobalMode,
     totalCarsFinished,
     avgWaitCompleted, avgWaitActive, tMax, throughput,
     realtimeNodes, connected, sendTopologyUpdate
@@ -27,7 +28,6 @@ export default function Sandbox() {
   
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [spawnCount, setSpawnCount] = useState<number>(5);
-  const [globalMode, setGlobalMode] = useState<'STATIC' | 'AI'>('STATIC');
   const [spawnAmbulance, setSpawnAmbulance] = useState<boolean>(false);
   const [simRunning, setSimRunning] = useState<boolean>(false);
   const [simLoading, setSimLoading] = useState<boolean>(false);

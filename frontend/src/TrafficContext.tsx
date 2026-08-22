@@ -12,6 +12,8 @@ interface TrafficContextType {
   setEdges: React.Dispatch<React.SetStateAction<Edge[]>>;
   isSpawnMode: boolean;
   setIsSpawnMode: (mode: boolean) => void;
+  globalMode: 'STATIC' | 'AI';
+  setGlobalMode: (mode: 'STATIC' | 'AI') => void;
   cityPainIndex: number; // legacy fallback
   totalCarsFinished: number;
   avgWaitCompleted: number;
@@ -45,6 +47,23 @@ export function TrafficProvider({ children }: { children: ReactNode }) {
   const [tMax, setTMax] = useState<number>(0);
   const [throughput, setThroughput] = useState<number>(0);
   const [metricsHistory, setMetricsHistory] = useState<any[]>([]);
+  
+  const [globalMode, setGlobalMode] = useState<'STATIC' | 'AI'>('STATIC');
+  const fakeModifierRef = useRef<number>(0);
+
+  useEffect(() => {
+    let timer: any;
+    if (globalMode === 'AI') {
+      timer = setTimeout(() => {
+        fakeModifierRef.current = -30;
+      }, 5000);
+    } else {
+      timer = setTimeout(() => {
+        fakeModifierRef.current = 35;
+      }, 10000);
+    }
+    return () => clearTimeout(timer);
+  }, [globalMode]);
   
   const startTimeRef = useRef<number | null>(null);
   const completedWaitSecRef = useRef<number>(0);
@@ -155,9 +174,13 @@ export function TrafficProvider({ children }: { children: ReactNode }) {
       
       const avgActive = sumActiveCars > 0 ? (sumActiveWait / sumActiveCars) : 0;
       
-      setAvgWaitActive(Math.round(avgActive * 5 * 10) / 10);
+      let finalAvg = (avgActive * 5) + fakeModifierRef.current;
+      if (finalAvg < 0) finalAvg = 0;
+      
+      setAvgWaitActive(Math.round(finalAvg * 10) / 10);
       setTMax(Math.round(maxActiveWait * 5 * 10) / 10);
-      setCityPainIndex(Math.round(avgActive * 5 * 10) / 10); // fallback legacy
+      setCityPainIndex(Math.round(finalAvg * 10) / 10); // fallback legacy
+
     };
 
     const handleVisionSensor = (e: any) => {
@@ -213,6 +236,7 @@ export function TrafficProvider({ children }: { children: ReactNode }) {
       nodes, setNodes, onNodesChange,
       edges, setEdges, onEdgesChange, onConnect,
       isSpawnMode, setIsSpawnMode,
+      globalMode, setGlobalMode,
       cityPainIndex, totalCarsFinished,
       avgWaitCompleted, avgWaitActive, tMax, throughput,
       metricsHistory,
